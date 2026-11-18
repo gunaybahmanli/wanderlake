@@ -13,6 +13,13 @@ dev = [
     "sqlfluff",
     "pre-commit",
     "pytest",
+    # Runtime libraries of the ingestion package. Already in the apache/airflow image;
+    # lower bounds match the versions shipped in apache/airflow:3.4.0.
+    "requests>=2.34",
+    "boto3>=1.43",
+    # Test doubles (no internet or real S3 needed)
+    "requests-mock",
+    "moto[s3]",
 ]
 
 [tool.uv]
@@ -28,3 +35,7 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "ingestion/tests"]
+pythonpath = ["ingestion/src"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ingestion"]

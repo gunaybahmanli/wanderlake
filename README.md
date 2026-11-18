@@ -130,6 +130,30 @@ docker exec -it wanderlake-seaweedfs-1 weed shell
 > fs.ls /buckets/raw
 ```
 
+## Pipelines
+
+| DAG | Schedule (UTC) | Source | Output (bronze) |
+|---|---|---|---|
+| `frankfurter_rates` | daily 16:30 | [Frankfurter API](https://frankfurter.dev), ECB reference rates, base EUR | `s3://raw/frankfurter/rates/date=YYYY-MM-DD/rates.json` |
+
+### `frankfurter_rates`
+
+Fetches the European Central Bank reference rates from `https://api.frankfurter.dev/v2/providers/ecb/rates?date=<date>&base=EUR` and stores the response body unchanged. The date is the run's logical date, and re-running a date overwrites the same object.
+
+- On weekends, holidays, or before the ECB publishes, the API returns the last business day. The file is still stored, and the object metadata `rate_date` shows which day the rates are for.
+- Each object carries metadata: `ingested_at`, `source_url`, `http_status`, `requested_date`, `rate_date`.
+- The code lives in the `ingestion` package (`ingestion/src/ingestion/sources/frankfurter.py`); the DAG only calls it.
+
+Run and inspect it:
+
+```bash
+make backfill DAG=frankfurter_rates START=2026-11-11 END=2026-11-17   # one run per day, inclusive
+make s3-ls                                                            # list objects in the raw bucket
+make s3-ls BUCKET=lakehouse                                           # or another bucket
+```
+
+New DAGs start paused: unpause `frankfurter_rates` in the Airflow UI (or `docker exec wanderlake-airflow-1 airflow dags unpause frankfurter_rates`) for the daily schedule to run. You can trigger a single run from the UI with the play button.
+
 ## Development
 
 Prerequisites: [uv](https://docs.astral.sh/uv/) and `make`.
