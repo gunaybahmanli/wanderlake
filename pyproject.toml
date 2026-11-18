@@ -17,6 +17,8 @@ dev = [
     # lower bounds match the versions shipped in apache/airflow:3.4.0.
     "requests>=2.34",
     "boto3>=1.43",
+    "pydantic>=2.14",
+    "pyyaml>=6.0",
     # Test doubles (no internet or real S3 needed)
     "requests-mock",
     "moto[s3]",

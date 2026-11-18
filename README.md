@@ -136,6 +136,19 @@ docker exec -it wanderlake-seaweedfs-1 weed shell
 > fs.ls /buckets/raw
 ```
 
+## Cities
+
+[`config/cities.yaml`](config/cities.yaml) is the single source of truth for the cities Wanderlake covers. Every city-aware connector reads it through `ingestion.config.load_cities()`, which validates it (unique slug ids, ISO country and currency codes, coordinate ranges, IANA time zone, `rate_source`).
+
+To add a city:
+
+1. Add an entry to `config/cities.yaml` with all fields: `id` (lowercase kebab-case, e.g. `new-york-city`), `name`, `country_code` (ISO 3166-1 alpha-2), `timezone` (IANA, e.g. `Asia/Baku`), `latitude` and `longitude` (city centre, 4 decimals), `currency` (ISO 4217).
+2. Set `rate_source`: `ecb` if the currency is EUR or appears in the [ECB euro reference rates](https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html), otherwise `cbar`.
+3. Set `inside_airbnb`: `true` if the city is on the Inside Airbnb [Get the Data](https://insideairbnb.com/get-the-data/) page, `false` if not, `null` if not checked yet.
+4. Run `make test`: the config tests fail with a message naming the city and field if anything is wrong. Update the expected id list in `ingestion/tests/test_config.py`.
+
+The Airflow container mounts `config/` read-only at `/opt/wanderlake/config`, so DAGs read the same file.
+
 ## Pipelines
 
 | DAG | Schedule (UTC) | Source | Output (bronze) |
@@ -206,6 +219,7 @@ CI (GitHub Actions) runs the same checks on every pull request and push to `main
 | `airflow/dags` | Airflow DAGs |
 | `streaming` | Kafka and Debezium configuration and consumers |
 | `spark/jobs` | Spark jobs writing Iceberg tables |
+| `config` | Shared configuration (`cities.yaml`) |
 | `dbt` | dbt project for silver and gold models |
 | `legacy` | Simulated legacy/operational source systems |
 | `ai` | RAG pipeline, embeddings and MCP server |
