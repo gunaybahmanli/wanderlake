@@ -11,6 +11,10 @@ What problem are we solving? What forces, constraints and options are in play?
 
 What we decided to do, stated clearly and in the active voice.
 
+## Alternatives considered
+
+The other options, and why each was not chosen.
+
 ## Consequences
 
 What becomes easier or harder as a result. Include trade-offs, risks and follow-up work.
