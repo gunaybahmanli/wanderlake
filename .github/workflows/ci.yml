@@ -87,3 +87,27 @@ jobs:
 
       - name: Run DAG integrity tests
         run: .venv-airflow/bin/python -m pytest tests/dags -v
+
+  tofu:
+    name: OpenTofu checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: infra/tofu
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: 1.13.9
+          tofu_wrapper: false
+
+      - name: Init (no backend, no credentials)
+        run: tofu init -backend=false -input=false
+
+      - name: Format check
+        run: tofu fmt -check -recursive -diff
+
+      - name: Validate
+        run: tofu validate
