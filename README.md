@@ -5,7 +5,7 @@ Wanderlake is a global travel intelligence platform built on a self-made, fully 
 ## What it does
 
 - Ingests travel-related data from public APIs, files and operational databases on a schedule (Airflow) and in real time (Kafka + Debezium CDC).
-- Stores everything in an open lakehouse: Apache Iceberg tables on S3-compatible storage (MinIO locally, Cloudflare R2 in the cloud), queried with Trino and Spark.
+- Stores everything in an open lakehouse: Apache Iceberg tables on S3-compatible storage (SeaweedFS locally, Cloudflare R2 in the cloud), queried with Trino and Spark.
 - Transforms raw data into tested, documented bronze, silver and gold models with dbt.
 - Answers natural-language travel questions through an AI layer (Ollama, RAG over pgvector, and an MCP server exposing lakehouse tools).
 - Serves insights through a FastAPI backend, a Next.js website, and Evidence.dev / Superset dashboards.
@@ -13,7 +13,7 @@ Wanderlake is a global travel intelligence platform built on a self-made, fully 
 ## Architecture
 
 ```
-  Sources                 Ingestion                  Lakehouse (Apache Iceberg on MinIO / R2)        Consumers
+  Sources                 Ingestion                  Lakehouse (Apache Iceberg on SeaweedFS / R2)    Consumers
   -------                 ---------                  ----------------------------------------        ---------
   Public APIs   --+                                                                               +-->  AI layer (Ollama, RAG, MCP)
   Files / dumps --+-->  Airflow (batch)   --+                                                     |
@@ -36,7 +36,7 @@ Wanderlake is a global travel intelligence platform built on a self-made, fully 
 | Streaming and CDC | Apache Kafka, Debezium |
 | Processing | Apache Spark |
 | Table format | Apache Iceberg |
-| Object storage | MinIO (local), Cloudflare R2 (cloud) |
+| Object storage | SeaweedFS (local, S3-compatible), Cloudflare R2 (cloud) |
 | Query engine | Trino |
 | Transformation | dbt |
 | Operational DB and vectors | Postgres + pgvector (local), Supabase (cloud) |
@@ -54,7 +54,7 @@ Phase 0: foundation in progress.
 
 ## Roadmap
 
-- **Phase 0: Foundation.** Repository structure, Docker Compose base, MinIO, Postgres, CI skeleton, ADRs.
+- **Phase 0: Foundation.** Repository structure, Docker Compose core profile (Postgres + pgvector, SeaweedFS, Airflow), CI skeleton, ADRs.
 - **Phase 1: Batch lakehouse.** Ingestion package, Airflow DAGs, Spark jobs, Iceberg bronze/silver/gold, Trino, dbt models and tests.
 - **Phase 2: Streaming and CDC.** Kafka, Debezium, streaming ingestion into Iceberg.
 - **Phase 3: AI layer.** pgvector embeddings, Ollama, RAG pipeline, MCP server.
@@ -63,7 +63,72 @@ Phase 0: foundation in progress.
 
 ## Run locally
 
-Coming soon. Instructions will be added once the Phase 0 Docker Compose stack is in place.
+Prerequisites: Docker with Docker Compose v2, `make`, and about 3 GB of free RAM for the `core` profile.
+
+1. Create your local environment file and replace every `change-me` value:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Start the core services (Postgres + pgvector, SeaweedFS, Airflow):
+
+   ```bash
+   make up            # same as: make up PROFILE=core
+   make ps            # wait until every service is "healthy" (Airflow takes 1-2 minutes)
+   ```
+
+3. Open the services:
+
+   | Service | URL / port | Login |
+   |---|---|---|
+   | Airflow UI | http://localhost:8080 | `AIRFLOW_ADMIN_USER` / `AIRFLOW_ADMIN_PASSWORD` from `.env` |
+   | S3 API (SeaweedFS) | http://localhost:8333 (path-style) | `S3_ACCESS_KEY` / `S3_SECRET_KEY` from `.env` |
+   | SeaweedFS filer UI | http://localhost:8888/buckets/ | none (read-only file browser, local only) |
+   | SeaweedFS master UI | http://localhost:9333 | none (cluster status) |
+   | Postgres | `localhost:5432`, database `wanderlake` | `POSTGRES_USER` / `POSTGRES_PASSWORD` from `.env` |
+
+   On first start, the one-shot `s3-init` container creates the `raw` and `lakehouse` buckets.
+
+4. Useful commands:
+
+   ```bash
+   make logs                  # follow all logs
+   make logs SERVICE=airflow  # follow one service
+   make psql                  # psql shell in the wanderlake database
+   ```
+
+5. Stop everything (data is kept in Docker volumes):
+
+   ```bash
+   make down
+   ```
+
+   To also delete all data, run `docker compose --env-file .env -f infra/compose/compose.yaml --profile core down -v`.
+
+### Browsing object storage from the command line
+
+SeaweedFS has no MinIO-style console. Use any S3 client with path-style addressing, for example the AWS CLI in Docker (no local install needed):
+
+```bash
+set -a; . ./.env; set +a
+aws_s3() {
+  docker run --rm --network host \
+    -e AWS_ACCESS_KEY_ID="$S3_ACCESS_KEY" -e AWS_SECRET_ACCESS_KEY="$S3_SECRET_KEY" \
+    -e AWS_DEFAULT_REGION="$S3_REGION" -e AWS_ENDPOINT_URL="$S3_ENDPOINT" \
+    amazon/aws-cli:2.41.0 s3 "$@"
+}
+aws_s3 ls                          # list buckets
+aws_s3 ls s3://raw --recursive     # list files in a bucket
+```
+
+Or use the SeaweedFS shell inside the container:
+
+```bash
+docker exec -it wanderlake-seaweedfs-1 weed shell
+> s3.bucket.list
+> fs.ls /buckets/raw
+```
 
 ## Development
 

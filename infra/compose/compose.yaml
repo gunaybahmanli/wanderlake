@@ -1,0 +1,148 @@
+# Wanderlake local stack.
+# Run from the repo root via the Makefile (make up / make down), which passes
+# --env-file .env and --profile. Relative paths below resolve from this folder.
+#
+# Memory budget (WSL2 = 4 GB): postgres 512m + seaweedfs 640m + airflow 2g ~= 3.1 GB limits,
+# with s3-init only running for a few seconds at startup.
+
+name: wanderlake
+
+services:
+  # ---------------------------------------------------------------------------
+  # Postgres 17 + pgvector: Airflow metadata DB ("airflow") and app DB ("wanderlake")
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg17-bookworm
+    profiles: ["core"]
+    restart: unless-stopped
+    mem_limit: 512m
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-wanderlake}
+      AIRFLOW_DB_USER: ${AIRFLOW_DB_USER:-airflow}
+      AIRFLOW_DB_PASSWORD: ${AIRFLOW_DB_PASSWORD:?set AIRFLOW_DB_PASSWORD in .env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # SeaweedFS: S3-compatible object storage (master + volume + filer + S3 gateway
+  # in one "weed server" process). Path-style addressing (no -s3.domainName set).
+  # ---------------------------------------------------------------------------
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.54
+    profiles: ["core"]
+    restart: unless-stopped
+    mem_limit: 640m
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY in .env}
+    # Render the S3 identity config from .env, then hand off to the image's entrypoint.
+    entrypoint: ["/bin/sh", "/seaweedfs/start.sh"]
+    command:
+      - server
+      - -ip=seaweedfs
+      - -ip.bind=0.0.0.0
+      - -s3
+      - -s3.port=8333
+      - -s3.config=/tmp/s3.json
+      - -volume.max=0
+    ports:
+      - "${S3_PORT:-8333}:8333"   # S3 API
+      - "${SEAWEEDFS_FILER_PORT:-8888}:8888" # Filer web UI (browse buckets and files)
+      - "${SEAWEEDFS_MASTER_PORT:-9333}:9333" # Master web UI (cluster status)
+    volumes:
+      - s3_data:/data
+      - ./seaweedfs/start.sh:/seaweedfs/start.sh:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # One-shot: create the buckets (idempotent), then exit.
+  # No healthcheck and no restart: it is a job, not a long-running service.
+  s3-init:
+    image: amazon/aws-cli:2.41.0
+    profiles: ["core"]
+    restart: "no"
+    mem_limit: 256m
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
+      AWS_ENDPOINT_URL: http://seaweedfs:8333
+      S3_BUCKETS: ${S3_BUCKETS:-raw lakehouse}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        aws configure set default.s3.addressing_style path
+        for b in $$S3_BUCKETS; do
+          if aws s3api head-bucket --bucket "$$b" 2>/dev/null; then
+            echo "bucket $$b already exists"
+          else
+            aws s3api create-bucket --bucket "$$b" >/dev/null && echo "created bucket $$b"
+          fi
+        done
+
+  # ---------------------------------------------------------------------------
+  # Apache Airflow 3 (standalone: api-server, scheduler, dag-processor, triggerer)
+  # ---------------------------------------------------------------------------
+  airflow:
+    image: apache/airflow:3.4.0-python3.12
+    profiles: ["core"]
+    restart: unless-stopped
+    mem_limit: 2g
+    user: "${AIRFLOW_UID:-50000}:0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__PARALLELISM: "4"
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:?set AIRFLOW__CORE__FERNET_KEY in .env}
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER:-airflow}:${AIRFLOW_DB_PASSWORD}@postgres:5432/airflow
+      AIRFLOW__API__SECRET_KEY: ${AIRFLOW__API__SECRET_KEY:?set AIRFLOW__API__SECRET_KEY in .env}
+      AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET:?set AIRFLOW__API_AUTH__JWT_SECRET in .env}
+      AIRFLOW__API__WORKERS: "1" # keep the api-server small on a 4 GB machine
+      # Simple auth manager (Airflow 3 default): one admin user, password from .env.
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: ${AIRFLOW_ADMIN_USER:-admin}:admin
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/simple_auth_manager_passwords.json
+      AIRFLOW_ADMIN_USER: ${AIRFLOW_ADMIN_USER:-admin}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?set AIRFLOW_ADMIN_PASSWORD in .env}
+    command:
+      - bash
+      - -c
+      - |
+        printf '{"%s": "%s"}\n' "$$AIRFLOW_ADMIN_USER" "$$AIRFLOW_ADMIN_PASSWORD" \
+          > "$$AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE"
+        exec airflow standalone
+    ports:
+      - "${AIRFLOW_PORT:-8080}:8080"
+    volumes:
+      - ../../airflow/dags:/opt/airflow/dags
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+volumes:
+  pg_data:
+  s3_data:
