@@ -1,0 +1,120 @@
+# Wanderlake cities: the single source of truth for all connectors.
+# Every pipeline that is city-aware (rates, weather, listings, ...) reads this file through
+# ingestion.config.load_cities(); never hard-code a city list anywhere else.
+#
+# Fields (validated by ingestion/src/ingestion/config.py):
+#   id             lowercase kebab-case slug, unique (used in object keys and table rows)
+#   name           English name
+#   country_code   ISO 3166-1 alpha-2
+#   timezone       IANA time zone name
+#   latitude       city centre, decimal degrees, 4 decimals (source: Wikidata P625)
+#   longitude      city centre, decimal degrees, 4 decimals (source: Wikidata P625)
+#   currency       ISO 4217 code
+#   rate_source    "ecb" if the ECB euro reference rates include the currency (or it is EUR),
+#                  otherwise "cbar" (Central Bank of Azerbaijan official rates)
+#   inside_airbnb  true if the city is on insideairbnb.com "Get the Data"; null = not checked
+#
+# Verified on 2026-11-18 (UTC): rate_source against the ECB daily reference rates of 2026-11-18
+# (AZN and AED are not included; CBAR publishes AED), inside_airbnb against the
+# Get the Data page (121 cities; Baku, Dubai and Seoul are not listed).
+
+cities:
+  - id: baku
+    name: Baku
+    country_code: AZ
+    timezone: Asia/Baku
+    latitude: 40.3667
+    longitude: 49.8352
+    currency: AZN
+    rate_source: cbar
+    inside_airbnb: false
+
+  - id: madrid
+    name: Madrid
+    country_code: ES
+    timezone: Europe/Madrid
+    latitude: 40.4169
+    longitude: -3.7033
+    currency: EUR
+    rate_source: ecb
+    inside_airbnb: true
+
+  - id: tokyo
+    name: Tokyo
+    country_code: JP
+    timezone: Asia/Tokyo
+    latitude: 35.6894
+    longitude: 139.6917
+    currency: JPY
+    rate_source: ecb
+    inside_airbnb: true
+
+  - id: bangkok
+    name: Bangkok
+    country_code: TH
+    timezone: Asia/Bangkok
+    latitude: 13.7500
+    longitude: 100.5167
+    currency: THB
+    rate_source: ecb
+    inside_airbnb: true
+
+  - id: rome
+    name: Rome
+    country_code: IT
+    timezone: Europe/Rome
+    latitude: 41.8931
+    longitude: 12.4828
+    currency: EUR
+    rate_source: ecb
+    inside_airbnb: true
+
+  - id: amsterdam
+    name: Amsterdam
+    country_code: NL
+    timezone: Europe/Amsterdam
+    latitude: 52.3667
+    longitude: 4.8833
+    currency: EUR
+    rate_source: ecb
+    inside_airbnb: true
+
+  - id: dubai
+    name: Dubai
+    country_code: AE
+    timezone: Asia/Dubai
+    latitude: 25.2697
+    longitude: 55.3094
+    currency: AED
+    rate_source: cbar
+    inside_airbnb: false
+
+  - id: new-york-city
+    name: New York City
+    country_code: US
+    timezone: America/New_York
+    latitude: 40.7128
+    longitude: -74.0061
+    currency: USD
+    rate_source: ecb
+    inside_airbnb: true
+
+  - id: prague
+    name: Prague
+    country_code: CZ
+    timezone: Europe/Prague
+    latitude: 50.0875
+    longitude: 14.4214
+    currency: CZK
+    rate_source: ecb
+    inside_airbnb: true
+
+  - id: seoul
+    name: Seoul
+    country_code: KR
+    timezone: Asia/Seoul
+    latitude: 37.5600
+    longitude: 126.9900
+    currency: KRW
+    rate_source: ecb
+    inside_airbnb: false
