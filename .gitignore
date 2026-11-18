@@ -19,6 +19,8 @@ htmlcov/
 # ---------- uv / virtualenvs ----------
 .venv/
 venv/
+.venv-airflow/
+.airflow-ci/
 env/
 .python-version.local
 

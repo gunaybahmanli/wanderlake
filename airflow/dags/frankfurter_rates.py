@@ -35,7 +35,7 @@ Code lives in the `ingestion` package (`ingestion.sources.frankfurter`).
     start_date=datetime(2026, 10, 1),
     catchup=False,
     max_active_runs=3,
-    default_args={"retries": 3, "retry_delay": timedelta(minutes=5)},
+    default_args={"owner": "wanderlake", "retries": 3, "retry_delay": timedelta(minutes=5)},
     tags=["bronze", "frankfurter"],
     doc_md=DOC_MD,
 )

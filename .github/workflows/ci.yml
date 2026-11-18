@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  AIRFLOW_VERSION: "3.4.0"
+
+jobs:
+  lint:
+    name: Lint (pre-commit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Install dev dependencies
+        run: uv sync --locked
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run pre-commit on all files
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Install dev dependencies
+        run: uv sync --locked
+
+      - name: Run unit tests
+        run: make test
+
+  dag-integrity:
+    name: DAG integrity (Airflow 3.4.0)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AIRFLOW_HOME: ${{ github.workspace }}/.airflow-ci
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      PYTHONPATH: ingestion/src
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-suffix: airflow-${{ env.AIRFLOW_VERSION }}
+          cache-dependency-glob: .github/workflows/ci.yml
+
+      - name: Install Airflow with official constraints
+        run: |
+          uv venv .venv-airflow --python "$PYTHON_VERSION"
+          uv pip install --python .venv-airflow \
+            "apache-airflow==${AIRFLOW_VERSION}" pytest \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
+
+      - name: Run DAG integrity tests
+        run: .venv-airflow/bin/python -m pytest tests/dags -v

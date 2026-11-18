@@ -146,6 +146,7 @@ services:
     volumes:
       - ../../airflow/dags:/opt/airflow/dags
       - ../../ingestion/src:/opt/wanderlake/ingestion/src:ro
+      - ../../tests:/opt/wanderlake/tests:ro # for make test-dags
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/v2/monitor/health"]
       interval: 15s

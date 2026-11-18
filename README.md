@@ -1,5 +1,7 @@
 # Wanderlake
 
+[![CI](https://github.com/gunaybahmanli/wanderlake/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gunaybahmanli/wanderlake/actions/workflows/ci.yml)
+
 Wanderlake is a global travel intelligence platform built on a self-made, fully open-source lakehouse. It pulls travel data from many sources (flights, weather, exchange rates, destinations, events and more) through batch and streaming pipelines, lands it in Apache Iceberg tables on object storage, models it into clean bronze, silver and gold layers, and serves it through an AI assistant, a public API, a website and analytics dashboards. The whole stack runs locally in Docker on WSL2, and an always-on version is published on free cloud tiers. It is built like a production system: infrastructure as code, CI/CD, data quality tests, observability, architecture decision records and runbooks.
 
 ## What it does
@@ -163,9 +165,12 @@ Prerequisites: [uv](https://docs.astral.sh/uv/) and `make`.
 | `make setup` | Installs the Python dev tools (ruff, sqlfluff, pre-commit, pytest) with uv and installs the git pre-commit hooks |
 | `make lint` | Runs every pre-commit hook on all files: whitespace and file checks, ruff, sqlfluff and gitleaks |
 | `make format` | Formats Python code and applies safe lint fixes with ruff |
-| `make test` | Runs the pytest suite |
+| `make test` | Runs the pytest suite (DAG integrity tests are skipped, since Airflow is not installed locally) |
+| `make test-dags` | Runs the DAG integrity tests inside the running Airflow container (needs `make up`) |
 
 Run `make` on its own to list all targets. The hooks also run automatically on every `git commit`.
+
+CI (GitHub Actions) runs the same checks on every pull request and push to `main`: lint, unit tests, and DAG integrity against Airflow 3.4.0. Dependabot opens weekly grouped updates for GitHub Actions and Python dependencies.
 
 ## Repository layout
 
