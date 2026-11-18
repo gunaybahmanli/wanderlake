@@ -35,3 +35,11 @@ updates:
     groups:
       web:
         patterns: ["*"]
+    ignore:
+      # typescript-eslint (used by eslint-config-next) supports TypeScript >=4.8.4 <6.1.0.
+      # Remove when its peerDependencies allow TypeScript 6.1+ / 7.
+      - dependency-name: typescript
+        versions: [">= 6.1"]
+  # ESLint stays on 10 (9 is end-of-life). eslint-config-next 16.4.6 bundles eslint-plugin-import,
+  # -jsx-a11y and -react, which do not declare ESLint 10 yet: npm ci prints peer-dependency
+  # warnings, but lint runs. If a plugin breaks, the CI "Web build" job fails.
