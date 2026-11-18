@@ -1,12 +1,16 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup lint format test clean up down ps logs psql
+.PHONY: help setup lint format test clean up down ps logs psql s3-ls backfill
 
 PROFILE ?= core
 SERVICE ?=
+BUCKET ?= raw
+DAG ?=
+START ?=
+END ?=
 COMPOSE := docker compose --env-file .env -f infra/compose/compose.yaml --profile $(PROFILE)
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-8s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-8s\033[0m %s\n", $$1, $$2}'
 
 setup: ## Install dev dependencies and git hooks
 	@uv sync
@@ -41,3 +45,10 @@ logs: ## Follow logs (all services, or one: make logs SERVICE=airflow)
 
 psql: ## Open psql in the wanderlake database
 	@$(COMPOSE) exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+
+s3-ls: ## List objects in a bucket (default: make s3-ls BUCKET=raw)
+	@$(COMPOSE) run --rm --no-deps --entrypoint aws s3-init s3 ls "s3://$(BUCKET)" --recursive --human-readable
+
+backfill: ## Backfill a DAG: make backfill DAG=frankfurter_rates START=2026-11-11 END=2026-11-17
+	@test -n "$(DAG)" -a -n "$(START)" -a -n "$(END)" || { echo "Usage: make backfill DAG=<dag_id> START=YYYY-MM-DD END=YYYY-MM-DD"; exit 1; }
+	@$(COMPOSE) exec airflow airflow backfill create --dag-id "$(DAG)" --from-date "$(START)" --to-date "$(END)"
