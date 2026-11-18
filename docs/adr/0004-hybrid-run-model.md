@@ -6,8 +6,7 @@
 ## Context
 
 There is no dedicated server. The only machine is a personal laptop with 8 GB RAM (WSL is limited to
-4 GB; `free -h` inside WSL shows 3.8 GiB) and a 128 GB SSD. A work laptop exists but is deliberately
-not used for this project.
+4 GB; `free -h` inside WSL shows 3.8 GiB) and a 128 GB SSD.
 
 The full architecture (Kafka, Debezium, Spark, Iceberg, Trino, Airflow, Postgres, AI services) does
 not fit in 4 GB at once. The `core` profile alone has memory limits of 512 MB (Postgres) + 640 MB
@@ -32,7 +31,6 @@ Split the system into a local stack and an always-on cloud version:
 
 - **Everything on the laptop:** does not fit in 4 GB.
 - **A paid VPS or cloud VM:** would run everything, but the project's target cost is $0.
-- **Using the work laptop:** ruled out to keep personal and employer resources separate.
 - **Cloud only:** free tiers cannot run Kafka, Spark or Airflow continuously.
 
 ## Consequences
