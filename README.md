@@ -32,6 +32,8 @@ Wanderlake is a global travel intelligence platform built on a self-made, fully 
 - **Serving:** Trino for SQL, Postgres + pgvector for embeddings, FastAPI for the public API.
 - **Consumers:** an AI assistant, a website, and dashboards.
 
+Design decisions and their trade-offs are recorded as [Architecture Decision Records](docs/adr/README.md).
+
 ## Tech stack
 
 | Layer | Technology |
@@ -212,7 +214,7 @@ CI (GitHub Actions) runs the same checks on every pull request and push to `main
 | `dashboards` | Evidence.dev and Superset assets |
 | `observability` | Monitoring, logging and alerting configuration |
 | `tests` | Cross-component and end-to-end tests |
-| `docs/adr` | Architecture decision records |
+| `docs/adr` | Architecture decision records ([index](docs/adr/README.md)) |
 | `docs/runbooks` | Operational runbooks |
 
 ## License

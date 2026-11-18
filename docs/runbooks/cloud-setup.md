@@ -116,12 +116,11 @@ reviewed change first.
 
 ### Accepted risk: unsigned Supabase and Vercel providers
 
-| | |
-|---|---|
-| Risk | `supabase/supabase` and `vercel/vercel` are installed **without signature verification**: the OpenTofu registry has no GPG keys for them (`tofu init` prints "Signature validation was skipped"). A compromised release could not be detected by signature. |
-| Mitigation | The provider versions are pinned exactly (supabase `1.11.1`, vercel `5.27.0`), and their checksums are pinned in the committed `infra/tofu/.terraform.lock.hcl`. Every later `tofu init` (locally and in CI) must download a binary with the same checksum, or it fails. `cloudflare/cloudflare` is signed and verified. |
-| On upgrade | Review the provider release notes and source tag on GitHub before bumping the version, then commit the updated lock file in the same change. |
-| Status | Supabase accepted on 2026-11-18, Vercel accepted on 2026-11-18. Re-check on each upgrade whether the registry now publishes a key. |
+`supabase/supabase` and `vercel/vercel` are installed without signature verification. The risk,
+mitigations and review rules are recorded in
+[ADR-0006](../adr/0006-accept-unsigned-opentofu-providers.md). In practice: before bumping either
+provider version, read its release notes and source tag, and commit the updated
+`.terraform.lock.hcl` in the same change.
 
 ### Known Vercel provider quirks (5.27.0)
 
