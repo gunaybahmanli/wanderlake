@@ -23,3 +23,15 @@ updates:
     groups:
       python:
         patterns: ["*"]
+
+  # Website dependencies (web/package.json + package-lock.json).
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      web:
+        patterns: ["*"]

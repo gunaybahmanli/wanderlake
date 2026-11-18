@@ -10,6 +10,10 @@ terraform {
       source  = "supabase/supabase"
       version = "1.11.1"
     }
+    vercel = {
+      source  = "vercel/vercel"
+      version = "5.27.0"
+    }
   }
 
   # State: local file (terraform.tfstate, gitignored) for now.

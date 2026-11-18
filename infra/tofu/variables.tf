@@ -60,3 +60,21 @@ variable "supabase_region" {
   type        = string
   default     = "eu-central-1"
 }
+
+variable "vercel_project_name" {
+  description = "Name of the Vercel project for the website."
+  type        = string
+  default     = "wanderlake"
+}
+
+variable "web_domain" {
+  description = "Production domain of the website on Vercel."
+  type        = string
+  default     = "wanderlake.vercel.app"
+}
+
+variable "vercel_team" {
+  description = "Vercel team slug or ID that owns the project (an identifier, not a secret)."
+  type        = string
+  default     = "me-f548"
+}

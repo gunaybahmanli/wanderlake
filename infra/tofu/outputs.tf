@@ -20,3 +20,8 @@ output "supabase_api_url" {
   description = "Supabase API URL for the project."
   value       = "https://${supabase_project.wanderlake.id}.supabase.co"
 }
+
+output "web_production_url" {
+  description = "Production URL of the website (live after the first deploy from main)."
+  value       = "https://${vercel_project_domain.production.domain}"
+}
