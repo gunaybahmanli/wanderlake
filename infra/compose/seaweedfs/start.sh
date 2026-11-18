@@ -6,8 +6,12 @@ set -eu
 : "${S3_ACCESS_KEY:?S3_ACCESS_KEY is required}"
 : "${S3_SECRET_KEY:?S3_SECRET_KEY is required}"
 
-umask 077
-cat > /tmp/s3.json <<EOF
+# Written to /etc/seaweedfs, not /tmp: with fs.protected_regular=2 (enabled on WSL and many
+# distros) even root cannot reopen an existing file owned by another user in sticky /tmp, so a
+# container restart would fail with "Permission denied". Owner root, readable by group seaweed.
+CONFIG=/etc/seaweedfs/s3.json
+umask 027
+cat > "$CONFIG" <<EOF
 {
   "identities": [
     {
@@ -20,6 +24,7 @@ cat > /tmp/s3.json <<EOF
   ]
 }
 EOF
-chown seaweed:seaweed /tmp/s3.json
+chown root:seaweed "$CONFIG"
+chmod 640 "$CONFIG"
 
 exec /entrypoint.sh "$@"
