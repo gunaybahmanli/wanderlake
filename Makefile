@@ -1,6 +1,7 @@
 .DEFAULT_GOAL := help
 .PHONY: help setup lint format test clean up down ps logs psql s3-ls backfill test-dags \
-	tofu-init tofu-fmt tofu-validate tofu-plan tofu-apply
+	tofu-init tofu-fmt tofu-validate tofu-plan tofu-apply \
+	web-install web-dev web-lint web-build
 
 PROFILE ?= core
 SERVICE ?=
@@ -81,3 +82,15 @@ tofu-plan: ## OpenTofu: show changes and save an encrypted plan for tofu-apply
 tofu-apply: ## OpenTofu: apply exactly the plan saved by tofu-plan
 	@test -f $(TOFU_DIR)/$(TOFU_PLAN) || { echo "No saved plan: run 'make tofu-plan' first and review it."; exit 1; }
 	@$(TOFU) apply -input=false $(TOFU_PLAN) && rm -f $(TOFU_PLAN)
+
+web-install: ## Website: install exact dependencies from web/package-lock.json
+	@cd web && npm ci --no-fund
+
+web-dev: ## Website: run the Next.js dev server on http://localhost:3000
+	@cd web && npm run dev
+
+web-lint: ## Website: run ESLint
+	@cd web && npm run lint
+
+web-build: ## Website: production build
+	@cd web && npm run build

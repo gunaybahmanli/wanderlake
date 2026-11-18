@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/gunaybahmanli/wanderlake/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gunaybahmanli/wanderlake/actions/workflows/ci.yml)
 
+**Live site:** https://wanderlake.vercel.app (goes live with the first deploy from `main`)
+
 Wanderlake is a global travel intelligence platform built on a self-made, fully open-source lakehouse. It pulls travel data from many sources (flights, weather, exchange rates, destinations, events and more) through batch and streaming pipelines, lands it in Apache Iceberg tables on object storage, models it into clean bronze, silver and gold layers, and serves it through an AI assistant, a public API, a website and analytics dashboards. The whole stack runs locally in Docker on WSL2, and an always-on version is published on free cloud tiers. It is built like a production system: infrastructure as code, CI/CD, data quality tests, observability, architecture decision records and runbooks.
 
 ## What it does
@@ -155,6 +157,26 @@ make s3-ls BUCKET=lakehouse                                           # or anoth
 ```
 
 New DAGs start paused: unpause `frankfurter_rates` in the Airflow UI (or `docker exec wanderlake-airflow-1 airflow dags unpause frankfurter_rates`) for the daily schedule to run. You can trigger a single run from the UI with the play button.
+
+## Website
+
+The website is a Next.js app (App Router, TypeScript) in [`web/`](web/), deployed on Vercel. The Vercel project itself is managed by OpenTofu in `infra/tofu`.
+
+Run it locally (Node.js 26):
+
+```bash
+make web-install   # npm ci in web/
+make web-dev       # http://localhost:3000
+make web-lint      # ESLint
+make web-build     # production build
+```
+
+How deploys work:
+
+- **Push or merge to `main`:** production deployment at https://wanderlake.vercel.app.
+- **Pull requests and other branches:** a preview deployment; the Vercel bot posts the link on the PR. Previews require a Vercel login (Standard Protection), production is public.
+- **Only when `web/` changes:** an ignored build step skips Vercel builds for commits that do not touch `web/`.
+- The footer shows the deployed commit (`VERCEL_GIT_COMMIT_SHA`), or `local` outside Vercel.
 
 ## Development
 
