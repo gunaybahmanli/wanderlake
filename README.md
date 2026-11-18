@@ -65,6 +65,19 @@ Phase 0: foundation in progress.
 
 Coming soon. Instructions will be added once the Phase 0 Docker Compose stack is in place.
 
+## Development
+
+Prerequisites: [uv](https://docs.astral.sh/uv/) and `make`.
+
+| Command | What it does |
+|---|---|
+| `make setup` | Installs the Python dev tools (ruff, sqlfluff, pre-commit, pytest) with uv and installs the git pre-commit hooks |
+| `make lint` | Runs every pre-commit hook on all files: whitespace and file checks, ruff, sqlfluff and gitleaks |
+| `make format` | Formats Python code and applies safe lint fixes with ruff |
+| `make test` | Runs the pytest suite |
+
+Run `make` on its own to list all targets. The hooks also run automatically on every `git commit`.
+
 ## Repository layout
 
 | Path | Purpose |
