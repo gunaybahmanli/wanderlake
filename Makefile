@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup lint format test clean up down ps logs psql s3-ls backfill
+.PHONY: help setup lint format test clean up down ps logs psql s3-ls backfill test-dags
 
 PROFILE ?= core
 SERVICE ?=
@@ -10,7 +10,7 @@ END ?=
 COMPOSE := docker compose --env-file .env -f infra/compose/compose.yaml --profile $(PROFILE)
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-8s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
 
 setup: ## Install dev dependencies and git hooks
 	@uv sync
@@ -23,8 +23,14 @@ format: ## Format and auto-fix Python code with ruff
 	@uv run ruff format .
 	@uv run ruff check --fix .
 
-test: ## Run the test suite
+test: ## Run the test suite (DAG integrity tests are skipped without Airflow)
 	@uv run pytest
+
+test-dags: ## Run DAG integrity tests inside the running Airflow container
+	@$(COMPOSE) exec airflow bash -c 'set -e; \
+		export PYTHONPATH="/tmp/test-deps:$$PYTHONPATH" DAGS_FOLDER=/opt/airflow/dags; \
+		python -c "import pytest" 2>/dev/null || pip install --quiet --disable-pip-version-check --target /tmp/test-deps pytest; \
+		python -m pytest -p no:cacheprovider --rootdir=/tmp -v /opt/wanderlake/tests/dags'
 
 clean: ## Remove tool caches
 	@rm -rf .ruff_cache .pytest_cache
