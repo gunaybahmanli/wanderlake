@@ -1,0 +1,72 @@
+# dbt, installed into its own virtualenv (/opt/dbt-venv) so it can never conflict with Airflow's
+# constraints. Full dependency tree, exact pins. Top-level packages:
+#   dbt-core==1.12.7
+#   dbt-trino==1.12.0
+# Regenerate after changing them:
+#   printf 'dbt-core==X\ndbt-trino==Y\n' > /tmp/dbt.in
+#   uv pip compile /tmp/dbt.in --python-version 3.12 --python-platform x86_64-manylinux_2_28 \
+#     --no-header --no-annotate -o infra/airflow/requirements-dbt.txt   (then restore this header)
+agate==1.9.1
+annotated-types==0.8.0
+attrs==26.1.0
+babel==2.18.0
+certifi==2026.10.23
+charset-normalizer==3.5.2
+click==8.5.1
+colorama==0.4.6
+daff==1.4.2
+dbt-adapters==1.24.6
+dbt-common==1.39.0
+dbt-core==1.12.7
+dbt-core-experimental-parser==2.0.11
+dbt-extractor==0.6.0
+dbt-protos==1.0.615
+dbt-trino==1.12.0
+deepdiff==8.6.2
+idna==3.20
+importlib-metadata==10.2.0
+isodate==0.7.2
+jinja2==3.1.6
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+lazy-importer==0.1.0
+leather==0.4.1
+lz4==4.4.5
+markupsafe==3.0.4
+mashumaro==3.17
+metricflow==0.214.0
+more-itertools==10.8.0
+msgpack==1.2.4
+networkx==3.7
+opentelemetry-api==1.45.2
+orderly-set==5.5.0
+orjson==3.13.0
+packaging==26.3
+parsedatetime==2.6
+pathspec==1.0.4
+protobuf==6.33.6
+pydantic==2.14.3
+pydantic-core==2.50.4
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.4
+python-slugify==9.2.0
+pytimeparse==1.1.10
+pytz==2026.6
+pyyaml==6.0.3
+rapidfuzz==3.14.6
+referencing==0.37.0
+requests==2.34.2
+rpds-py==2026.9.1
+six==1.17.0
+snowplow-tracker==1.1.0
+sqlglot==30.33.0
+sqlparse==0.6.1
+tabulate==0.10.0
+text-unidecode==1.3
+trino==0.340.0
+typing-extensions==4.16.0
+typing-inspection==0.4.5
+tzlocal==5.4.5
+urllib3==2.8.0
+zipp==4.1.2
+zstandard==0.25.0

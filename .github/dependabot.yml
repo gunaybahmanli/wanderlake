@@ -43,3 +43,13 @@ updates:
   # ESLint stays on 10 (9 is end-of-life). eslint-config-next 16.4.6 bundles eslint-plugin-import,
   # -jsx-a11y and -react, which do not declare ESLint 10 yet: npm ci prints peer-dependency
   # warnings, but lint runs. If a plugin breaks, the CI "Web build" job fails.
+
+  # Base image of the custom Airflow image (tag and digest in infra/airflow/Dockerfile).
+  # When it bumps Airflow itself, also update AIRFLOW_VERSION in .github/workflows/ci.yml.
+  - package-ecosystem: docker
+    directory: /infra/airflow
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: chore(deps)

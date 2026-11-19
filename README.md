@@ -90,6 +90,8 @@ Prerequisites: Docker with Docker Compose v2, `make`, and about 3 GB of free RAM
    make ps                       # wait until every service is "healthy" (Airflow takes 1-2 minutes)
    ```
 
+   Airflow runs on a custom image, `wanderlake-airflow:local`, built from [`infra/airflow/`](infra/airflow/): the official Airflow 3.4.0 image plus PyIceberg, Astronomer Cosmos, and dbt-trino in a separate virtualenv ([ADR-0007](docs/adr/0007-custom-airflow-image.md)). `make up` builds it the first time; after changing anything in `infra/airflow/`, run `make build` and then `make up` again.
+
 3. Open the services:
 
    | Service | URL / port | Login |
@@ -243,6 +245,7 @@ CI (GitHub Actions) runs the same checks on every pull request and push to `main
 | Path | Purpose |
 |---|---|
 | `infra/compose` | Docker Compose stack for local development |
+| `infra/airflow` | Custom Airflow image (Dockerfile, pinned requirements) |
 | `infra/tofu` | OpenTofu infrastructure as code for cloud resources |
 | `ingestion` | Python ingestion package and its tests |
 | `airflow/dags` | Airflow DAGs |
