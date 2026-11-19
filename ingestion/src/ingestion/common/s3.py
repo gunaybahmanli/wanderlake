@@ -47,6 +47,27 @@ def s3_client(env: Mapping[str, str] | None = None) -> Any:
     )
 
 
+def put_object(
+    bucket: str,
+    key: str,
+    body: bytes,
+    content_type: str,
+    metadata: Mapping[str, str] | None = None,
+    client: Any | None = None,
+) -> dict[str, Any]:
+    """Write a payload to S3 byte-for-byte (no re-serialization). Overwrites the key."""
+    client = client or s3_client()
+    response = client.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=body,
+        ContentType=content_type,
+        Metadata={k: str(v) for k, v in (metadata or {}).items()},
+    )
+    log_event(log, "s3.put", bucket=bucket, key=key, bytes=len(body), etag=response.get("ETag"))
+    return response
+
+
 def put_json(
     bucket: str,
     key: str,
@@ -54,14 +75,5 @@ def put_json(
     metadata: Mapping[str, str] | None = None,
     client: Any | None = None,
 ) -> dict[str, Any]:
-    """Write a JSON payload to S3 byte-for-byte (no re-serialization). Overwrites the key."""
-    client = client or s3_client()
-    response = client.put_object(
-        Bucket=bucket,
-        Key=key,
-        Body=body,
-        ContentType="application/json",
-        Metadata={k: str(v) for k, v in (metadata or {}).items()},
-    )
-    log_event(log, "s3.put", bucket=bucket, key=key, bytes=len(body), etag=response.get("ETag"))
-    return response
+    """Write a JSON payload to S3 byte-for-byte. Overwrites the key."""
+    return put_object(bucket, key, body, "application/json", metadata=metadata, client=client)

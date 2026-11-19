@@ -4,11 +4,13 @@ import json
 import threading
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 
 import boto3
 import pytest
 from moto import mock_aws
+from pyiceberg.catalog.sql import SqlCatalog
 
 BUCKET = "raw"
 
@@ -76,3 +78,19 @@ def http_server() -> Iterator[ScriptedServer]:
     yield server
     server.httpd.shutdown()
     server.httpd.server_close()
+
+
+@pytest.fixture
+def catalog(tmp_path: Path) -> Iterator[SqlCatalog]:
+    """PyIceberg SqlCatalog on SQLite with a local temp warehouse, namespace bronze created."""
+    from ingestion.common.iceberg import get_catalog
+
+    env = {
+        "ICEBERG_CATALOG_NAME": "wanderlake",
+        "ICEBERG_WAREHOUSE": f"file://{tmp_path / 'warehouse'}",
+        "ICEBERG_CATALOG_URI": f"sqlite:///{tmp_path / 'catalog.db'}",
+        "ICEBERG_INIT_CATALOG_TABLES": "true",
+    }
+    cat = get_catalog(env)
+    cat.create_namespace("bronze")
+    yield cat

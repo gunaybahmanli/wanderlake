@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -43,19 +42,6 @@ def raw_object(requested: str, rate_date: str, **meta: str) -> RawObject:
         metadata=metadata,
         source_file=f"s3://raw/{build_key(date.fromisoformat(requested))}",
     )
-
-
-@pytest.fixture
-def catalog(tmp_path: Path) -> Iterator[SqlCatalog]:
-    env = {
-        "ICEBERG_CATALOG_NAME": "wanderlake",
-        "ICEBERG_WAREHOUSE": f"file://{tmp_path / 'warehouse'}",
-        "ICEBERG_CATALOG_URI": f"sqlite:///{tmp_path / 'catalog.db'}",
-        "ICEBERG_INIT_CATALOG_TABLES": "true",
-    }
-    cat = get_catalog(env)
-    cat.create_namespace("bronze")
-    yield cat
 
 
 def put_raw(s3: Any, requested: str, rate_date: str) -> None:

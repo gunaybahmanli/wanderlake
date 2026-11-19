@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Trimmed CBAR file (structure as published on cbar.az), for offline tests. -->
+<ValCurs Date="13.11.2026" Name="AZN məzənnələri" Description="Test fixture">
+    <ValType Type="Bank metalları">
+        <Valute Code="XAU">
+            <Nominal>1 t.u.</Nominal>
+            <Name>Qızıl</Name>
+            <Value>6981.4425</Value>
+        </Valute>
+        <Valute Code="XAG">
+            <Nominal>1 t.u.</Nominal>
+            <Name>Gümüş</Name>
+            <Value>76.9193</Value>
+        </Valute>
+    </ValType>
+    <ValType Type="Xarici valyutalar">
+        <Valute Code="USD">
+            <Nominal>1</Nominal>
+            <Name>1 ABŞ dolları</Name>
+            <Value>1.7</Value>
+        </Valute>
+        <Valute Code="AED">
+            <Nominal>1</Nominal>
+            <Name>1 BƏƏ dirhəmi</Name>
+            <Value>0.4628</Value>
+        </Valute>
+        <Valute Code="JPY">
+            <Nominal>100</Nominal>
+            <Name>100 Yapon yeni</Name>
+            <Value>1.0653</Value>
+        </Valute>
+        <Valute Code="KRW">
+            <Nominal>100</Nominal>
+            <Name>100 Cənubi Koreya vonu</Name>
+            <Value>0.1276</Value>
+        </Valute>
+        <Valute Code="SDR">
+            <Nominal>1</Nominal>
+            <Name>1 SDR (BVF-nin xüsusi borcalma hüquqları)</Name>
+            <Value>2.2841</Value>
+        </Valute>
+    </ValType>
+</ValCurs>
