@@ -25,6 +25,11 @@ Fetches the European Central Bank reference rates (base **EUR**) from the free
   stored; the object metadata `rate_date` holds the date the rates are actually for.
 - **Metadata:** `ingested_at`, `source_url`, `http_status`, `requested_date`, `rate_date`.
 
+Then **load_bronze** reads that raw file and replaces the run date's rows in the Iceberg table
+`iceberg.bronze.frankfurter_rates` (one row per quote currency, partitioned by month). Re-running
+a date replaces its rows, so loads are idempotent. Bronze keeps weekend and holiday rows as
+received (they repeat the last business day under their own `requested_date`); silver dedupes.
+
 Code lives in the `ingestion` package (`ingestion.sources.frankfurter`).
 """
 
@@ -40,15 +45,25 @@ Code lives in the `ingestion` package (`ingestion.sources.frankfurter`).
     doc_md=DOC_MD,
 )
 def frankfurter_rates():
+    def run_date():
+        # Manual runs in Airflow 3 can have no logical date: fall back to the run time.
+        context = get_current_context()
+        return (context.get("logical_date") or context["dag_run"].run_after).date()
+
     @task
     def ingest() -> dict[str, str]:
         from ingestion.sources.frankfurter import ingest_rates
 
-        context = get_current_context()
-        run_date = context.get("logical_date") or context["dag_run"].run_after
-        return ingest_rates(run_date.date(), bucket=RAW_BUCKET)
+        return ingest_rates(run_date(), bucket=RAW_BUCKET)
 
-    ingest()
+    @task
+    def load_bronze() -> dict:
+        from ingestion.sources.frankfurter import load_bronze as load
+
+        run_id = get_current_context()["dag_run"].run_id
+        return load(run_date(), dag_run_id=run_id, bucket=RAW_BUCKET)
+
+    ingest() >> load_bronze()
 
 
 frankfurter_rates()

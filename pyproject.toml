@@ -19,6 +19,11 @@ dev = [
     "boto3>=1.43",
     "pydantic>=2.14",
     "pyyaml>=6.0",
+    # Same versions as the Airflow image (Airflow 3.4.0 constraints)
+    "pyiceberg[pyarrow,sql-sqlite,pyiceberg-core]==0.12.0",
+    "pyiceberg-core==0.10.1",
+    "pyarrow==25.0.1",
+    "sqlalchemy==2.0.55",
     # Test doubles (no internet or real S3 needed)
     "requests-mock",
     "moto[s3]",

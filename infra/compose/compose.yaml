@@ -2,8 +2,8 @@
 # Run from the repo root via the Makefile (make up / make down), which passes
 # --env-file .env and --profile. Relative paths below resolve from this folder.
 #
-# Memory budget (WSL2 = 4 GB). Limits: core = postgres 512m + seaweedfs 640m + airflow 2g;
-# query = trino 1536m. One-shot init containers run for a few seconds only.
+# Memory budget (WSL2 = 4 GB). Limits: core = postgres 512m + seaweedfs 640m + airflow 1.5g;
+# query = trino 1.2g. One-shot init containers run for a few seconds only.
 # Several profiles at once: make up PROFILE="core query".
 
 name: wanderlake
@@ -126,13 +126,15 @@ services:
     volumes:
       - ./postgres/init/02-iceberg-catalog.sh:/scripts/02-iceberg-catalog.sh:ro
 
-  # Trino single node (coordinator + worker). Memory: 1 GB heap (jvm.config) plus ~0.5 GB
-  # non-heap JVM overhead (metaspace, threads, code cache, direct buffers) = 1.5 GB limit.
+  # Trino single node (coordinator + worker). Memory: 768 MB heap (jvm.config) plus ~450 MB
+  # non-heap JVM overhead (metaspace, threads, code cache, direct buffers) = 1.2 GB limit.
+  # restart "no": after a WSL restart, Trino stays down instead of bringing the whole ~3 GB stack
+  # back at once (which put WSL into a restart loop). Start it when needed: make up PROFILE=...
   trino:
     image: trinodb/trino:484
     profiles: ["query"]
-    restart: unless-stopped
-    mem_limit: 1536m
+    restart: "no"
+    mem_limit: 1229m
     depends_on:
       postgres:
         condition: service_healthy
@@ -142,6 +144,8 @@ services:
         condition: service_completed_successfully
     environment:
       # Read by catalog/iceberg.properties through ${ENV:...}
+      ICEBERG_CATALOG_NAME: ${ICEBERG_CATALOG_NAME:?set ICEBERG_CATALOG_NAME in .env}
+      ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE:?set ICEBERG_WAREHOUSE in .env}
       ICEBERG_CATALOG_DB_USER: ${ICEBERG_CATALOG_DB_USER:-iceberg}
       ICEBERG_CATALOG_DB_PASSWORD: ${ICEBERG_CATALOG_DB_PASSWORD:?set ICEBERG_CATALOG_DB_PASSWORD in .env}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env}
@@ -173,7 +177,7 @@ services:
     image: wanderlake-airflow:local
     profiles: ["core"]
     restart: unless-stopped
-    mem_limit: 2g
+    mem_limit: 1536m # measured 0.9-1.1 GiB; lowered from 2g to leave room on a 4 GB WSL machine
     user: "${AIRFLOW_UID:-50000}:0"
     depends_on:
       postgres:
@@ -188,9 +192,15 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env}
       S3_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY in .env}
       S3_REGION: ${S3_REGION:-us-east-1}
+      # Iceberg catalog for PyIceberg (ingestion.common.iceberg); same catalog as Trino.
+      ICEBERG_CATALOG_NAME: ${ICEBERG_CATALOG_NAME:?set ICEBERG_CATALOG_NAME in .env}
+      ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE:?set ICEBERG_WAREHOUSE in .env}
+      ICEBERG_CATALOG_DB_HOST: postgres
+      ICEBERG_CATALOG_DB_USER: ${ICEBERG_CATALOG_DB_USER:-iceberg}
+      ICEBERG_CATALOG_DB_PASSWORD: ${ICEBERG_CATALOG_DB_PASSWORD:?set ICEBERG_CATALOG_DB_PASSWORD in .env}
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-      AIRFLOW__CORE__PARALLELISM: "4"
+      AIRFLOW__CORE__PARALLELISM: "2" # at most 2 task processes at once (memory)
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:?set AIRFLOW__CORE__FERNET_KEY in .env}
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER:-airflow}:${AIRFLOW_DB_PASSWORD}@postgres:5432/airflow
       AIRFLOW__API__SECRET_KEY: ${AIRFLOW__API__SECRET_KEY:?set AIRFLOW__API__SECRET_KEY in .env}

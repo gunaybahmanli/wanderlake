@@ -184,7 +184,7 @@ The Airflow container mounts `config/` read-only at `/opt/wanderlake/config`, so
 
 | DAG | Schedule (UTC) | Source | Output (bronze) |
 |---|---|---|---|
-| `frankfurter_rates` | daily 16:30 | [Frankfurter API](https://frankfurter.dev), ECB reference rates, base EUR | `s3://raw/frankfurter/rates/date=YYYY-MM-DD/rates.json` |
+| `frankfurter_rates` | daily 16:30 | [Frankfurter API](https://frankfurter.dev), ECB reference rates, base EUR | raw `s3://raw/frankfurter/rates/date=YYYY-MM-DD/rates.json`, then bronze `iceberg.bronze.frankfurter_rates` |
 
 ### `frankfurter_rates`
 
@@ -194,13 +194,36 @@ Fetches the European Central Bank reference rates from `https://api.frankfurter.
 - Each object carries metadata: `ingested_at`, `source_url`, `http_status`, `requested_date`, `rate_date`.
 - The code lives in the `ingestion` package (`ingestion/src/ingestion/sources/frankfurter.py`); the DAG only calls it.
 
+**Raw to bronze.** The DAG has two tasks, `ingest >> load_bronze`:
+
+1. `ingest` stores the API response unchanged in the `raw` bucket (one JSON file per requested date).
+2. `load_bronze` reads that file and writes one row per quote currency to the Iceberg table `iceberg.bronze.frankfurter_rates`, replacing that date's earlier rows in one atomic commit. Loading the same date again never duplicates rows.
+
+| Column | Meaning |
+|---|---|
+| `requested_date` | the run's date (what the API was asked for); the table is partitioned by its month |
+| `rate_date` | the business day the rates are for |
+| `base_currency`, `quote_currency`, `rate` | `rate` units of `quote_currency` per 1 `base_currency` (always EUR); `decimal(18, 8)`, parsed exactly |
+| `_ingested_at` | when the raw file was written (from its S3 metadata) |
+| `_loaded_at` | when the bronze row was written |
+| `_source_file` | the raw file, e.g. `s3://raw/frankfurter/rates/date=2026-11-17/rates.json` |
+| `_dag_run_id` | the Airflow run that loaded it |
+
+Bronze keeps the data as received: weekend and holiday runs repeat the last business day's rates under their own `requested_date` (with that day as `rate_date`). Deduplicating by `rate_date` is the silver layer's job.
+
+PyIceberg (in Airflow) and Trino share one Iceberg catalog. Its name, `ICEBERG_CATALOG_NAME` in `.env`, is read by both; if they differed, each would see different tables.
+
 Run and inspect it:
 
 ```bash
 make backfill DAG=frankfurter_rates START=2026-11-11 END=2026-11-17   # one run per day, inclusive
+make backfill DAG=frankfurter_rates START=2026-10-20 END=2026-11-19 REPROCESS=completed   # also re-run dates that already ran
 make s3-ls                                                            # list objects in the raw bucket
 make s3-ls BUCKET=lakehouse                                           # or another bucket
+make trino   # then: SELECT * FROM iceberg.bronze.frankfurter_rates ORDER BY requested_date DESC LIMIT 10;
 ```
+
+Backfill dates are run timestamps, not calendar days: the DAG runs at 16:30 UTC, and `END` means midnight at the start of that day. To include a day's run, set `END` to the **next** day (the example above loads 2026-10-20 up to and including 2026-11-18). `REPROCESS=completed` re-runs dates that already succeeded (in place, under their original run id); `MAX_ACTIVE_RUNS` (default 1) keeps memory use low.
 
 New DAGs start paused: unpause `frankfurter_rates` in the Airflow UI (or `docker exec wanderlake-airflow-1 airflow dags unpause frankfurter_rates`) for the daily schedule to run. You can trigger a single run from the UI with the play button.
 

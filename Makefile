@@ -10,6 +10,8 @@ BUCKET ?= raw
 DAG ?=
 START ?=
 END ?=
+REPROCESS ?= none
+MAX_ACTIVE_RUNS ?= 1
 
 # OpenTofu: load the root .env (credentials + TF_VAR_*) into the environment, then run in infra/tofu.
 TOFU_DIR := infra/tofu
@@ -72,9 +74,10 @@ psql: ## Open psql in the wanderlake database
 s3-ls: ## List objects in a bucket (default: make s3-ls BUCKET=raw)
 	@$(COMPOSE_ALL) run --rm --no-deps --entrypoint aws s3-init s3 ls "s3://$(BUCKET)" --recursive --human-readable
 
-backfill: ## Backfill a DAG: make backfill DAG=frankfurter_rates START=2026-11-11 END=2026-11-17
+backfill: ## Backfill: make backfill DAG=x START=YYYY-MM-DD END=YYYY-MM-DD [REPROCESS=completed] [MAX_ACTIVE_RUNS=1]
 	@test -n "$(DAG)" -a -n "$(START)" -a -n "$(END)" || { echo "Usage: make backfill DAG=<dag_id> START=YYYY-MM-DD END=YYYY-MM-DD"; exit 1; }
-	@$(COMPOSE_ALL) exec airflow airflow backfill create --dag-id "$(DAG)" --from-date "$(START)" --to-date "$(END)"
+	@$(COMPOSE_ALL) exec airflow airflow backfill create --dag-id "$(DAG)" --from-date "$(START)" --to-date "$(END)" \
+		--reprocess-behavior "$(REPROCESS)" --max-active-runs "$(MAX_ACTIVE_RUNS)"
 
 tofu-init: ## OpenTofu: download pinned providers (updates .terraform.lock.hcl)
 	@$(TOFU) init -input=false
