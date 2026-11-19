@@ -199,6 +199,7 @@ The Airflow container mounts `config/` read-only at `/opt/wanderlake/config`, so
 | `frankfurter_rates` | daily 16:30 | [Frankfurter API](https://frankfurter.dev), ECB reference rates, base EUR | raw `s3://raw/frankfurter/rates/date=YYYY-MM-DD/rates.json`, then bronze `iceberg.bronze.frankfurter_rates` |
 | `cbar_rates` | daily 16:30 | [CBAR](https://www.cbar.az) official rates, AZN per foreign unit | raw `s3://raw/cbar/rates/date=YYYY-MM-DD/rates.xml`, then bronze `iceberg.bronze.cbar_rates` |
 | `rest_countries` | weekly, Mon 03:00 | [REST Countries](https://restcountries.com) v5 reference data (API key) | raw `s3://raw/rest_countries/all/snapshot_date=YYYY-MM-DD/page=N.json`, then bronze `iceberg.bronze.rest_countries` |
+| `geonames_cities` | monthly, 1st 04:00 | [GeoNames](https://www.geonames.org) dump `cities15000.zip` (CC BY 4.0) | raw `s3://raw/geonames/cities15000/snapshot_date=YYYY-MM-DD/cities15000.zip`, then bronze `iceberg.bronze.geonames_cities` |
 
 ### `frankfurter_rates`
 
@@ -248,6 +249,16 @@ A weekly full snapshot of country reference data from REST Countries **v5**, whi
 - **Cities check:** every `country_code` in `config/cities.yaml` must be in the snapshot, otherwise `load_bronze` fails before writing.
 - **Bronze** (`iceberg.bronze.rest_countries`, partitioned by year): one row per country and `snapshot_date` with names, codes, region, `capital` (the primary capital, else the first), population, area, coordinates, flag URL, `independent` (v5 `sovereign`) and `un_member`. **Nested values stay JSON strings** (`capitals_json`, `languages_json`, `currencies_json`, `timezones_json`); flattening them is the silver layer's job.
 
+### `geonames_cities` (reference data)
+
+A monthly snapshot of the free GeoNames dump of cities with a population above 15,000 or capitals (`https://download.geonames.org/export/dump/cities15000.zip`, about 34,000 places, no account needed).
+
+- **Raw:** the zip is stored unchanged, with `file_size` and `sha256` in its metadata; `load_bronze` refuses a raw zip whose sha256 no longer matches.
+- **Parsing:** the tab-separated file is read with PyArrow using the 19 column names and types from the dump's `readme.txt`, no quoting, and empty values as null. Code columns (`admin1_code` etc.) stay strings so leading zeros survive.
+- **Validation (fails loudly):** more than 20,000 rows, unique `geonameid`, latitude and longitude in range.
+- **Cities link:** every city in `config/cities.yaml` has a `geonames_id`, matched by country, name and the closest distance, preferring the feature codes PPLC/PPLA/PPL (`match_city`). `load_bronze` fails before writing if a configured id is missing from the snapshot.
+- **Bronze** (`iceberg.bronze.geonames_cities`, partitioned by year): all 19 GeoNames columns plus `snapshot_date` and the four ingestion columns; `alternatenames` is kept as received.
+
 Run and inspect it:
 
 ```bash
@@ -281,6 +292,10 @@ How deploys work:
 - **Pull requests and other branches:** a preview deployment; the Vercel bot posts the link on the PR. Previews require a Vercel login (Standard Protection), production is public.
 - **Only when `web/` changes:** an ignored build step skips Vercel builds for commits that do not touch `web/`.
 - The footer shows the deployed commit (`VERCEL_GIT_COMMIT_SHA`), or `local` outside Vercel.
+
+## Attribution
+
+- **GeoNames:** city data (c) GeoNames (https://www.geonames.org), licensed under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0). The data is provided "as is" without warranty. Wanderlake stores it unchanged in raw and loads it, typed, into bronze; no other changes are made at that layer.
 
 ## Development
 
