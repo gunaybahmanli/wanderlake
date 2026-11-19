@@ -165,4 +165,6 @@ jobs:
           docker run --rm --entrypoint python wanderlake-airflow:ci -c \
             "import pyiceberg, cosmos; print('pyiceberg', pyiceberg.__version__, '| cosmos', cosmos.__version__)"
           docker run --rm --entrypoint /opt/dbt-venv/bin/dbt wanderlake-airflow:ci --version
-          docker run --rm --entrypoint pip wanderlake-airflow:ci check
+          # python -m pip, not a bare "pip": the base image PATH starts with /root/bin, which the
+          # airflow user cannot read, and a bare command lookup stops there (Permission denied).
+          docker run --rm --entrypoint python wanderlake-airflow:ci -m pip check
