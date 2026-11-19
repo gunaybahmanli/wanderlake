@@ -2,7 +2,7 @@
 .PHONY: help setup lint format test clean up down ps logs psql s3-ls backfill test-dags \
 	tofu-init tofu-fmt tofu-validate tofu-plan tofu-apply \
 	web-install web-dev web-lint web-build \
-	trino lakehouse-init lakehouse-smoke-test build mode-query mode-ingest
+	trino lakehouse-init lakehouse-smoke-test build mode-query mode-ingest weather-backfill
 
 PROFILE ?= core
 SERVICE ?=
@@ -12,6 +12,7 @@ START ?=
 END ?=
 REPROCESS ?= none
 MAX_ACTIVE_RUNS ?= 1
+WEATHER_START ?= 2023-01-01
 
 # OpenTofu: load the root .env (credentials + TF_VAR_*) into the environment, then run in infra/tofu.
 TOFU_DIR := infra/tofu
@@ -134,3 +135,6 @@ lakehouse-smoke-test: ## Create, write, read and drop a temporary Iceberg table;
 	@$(TRINO_CLI) --execute "DROP TABLE iceberg.bronze.smoke_test"
 	@echo "== 4. files after the drop"
 	@$(COMPOSE_ALL) run --rm --no-deps --entrypoint aws s3-init s3 ls s3://lakehouse/warehouse/bronze/ --recursive --human-readable || echo "(none)"
+
+weather-backfill: ## One-time Open-Meteo history backfill, month by month (WEATHER_START=2023-01-01)
+	@$(COMPOSE_ALL) exec -T airflow python -m ingestion.sources.open_meteo backfill --start "$(WEATHER_START)"

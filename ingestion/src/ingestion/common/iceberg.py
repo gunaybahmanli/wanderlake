@@ -22,7 +22,7 @@ from urllib.parse import quote
 import pyarrow as pa
 import pyarrow.compute as pc
 from pyiceberg.catalog.sql import SqlCatalog
-from pyiceberg.expressions import EqualTo
+from pyiceberg.expressions import And, EqualTo, GreaterThanOrEqual, LessThanOrEqual
 from pyiceberg.partitioning import PartitionSpec
 from pyiceberg.schema import Schema
 from pyiceberg.table import Table
@@ -130,6 +130,38 @@ def replace_rows(table: Table, arrow_table: pa.Table, column: str, value: Any) -
         table=".".join(table.name()),
         column=column,
         value=value,
+        rows=arrow_table.num_rows,
+    )
+    return arrow_table.num_rows
+
+
+def replace_range(table: Table, arrow_table: pa.Table, column: str, start: Any, end: Any) -> int:
+    """Atomically replace all rows with start <= column <= end by arrow_table (idempotent reload
+    of a date-range batch). Every row of arrow_table must lie in the range. Returns rows written.
+    """
+    if column not in arrow_table.column_names:
+        raise ValueError(f"column {column!r} is not in the data")
+    if arrow_table.num_rows:
+        col_type = arrow_table.schema.field(column).type
+        low = pc.cast(pa.scalar(start), col_type)
+        high = pc.cast(pa.scalar(end), col_type)
+        values = arrow_table[column]
+        inside = pc.and_(pc.greater_equal(values, low), pc.less_equal(values, high))
+        if not pc.all(inside).as_py():
+            raise ValueError(f"every row must have {start!r} <= {column} <= {end!r}")
+
+    table.overwrite(
+        arrow_table,
+        overwrite_filter=And(GreaterThanOrEqual(column, start), LessThanOrEqual(column, end)),
+        snapshot_properties={"wanderlake.replace": f"{start}<={column}<={end}"},
+    )
+    log_event(
+        log,
+        "iceberg.range_replaced",
+        table=".".join(table.name()),
+        column=column,
+        start=start,
+        end=end,
         rows=arrow_table.num_rows,
     )
     return arrow_table.num_rows
