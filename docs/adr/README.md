@@ -7,7 +7,7 @@ and the consequences.
 |---|---|---|---|
 | [0001](0001-use-apache-airflow-3.md) | Use Apache Airflow 3 for orchestration | Accepted | 2026-11-18 |
 | [0002](0002-use-seaweedfs-for-local-object-storage.md) | Use SeaweedFS as the local S3-compatible object store | Accepted | 2026-11-18 |
-| [0003](0003-use-iceberg-with-sql-catalog.md) | Use Apache Iceberg with a SQL catalog in Postgres | Accepted (implementation in Phase 1) | 2026-11-18 |
+| [0003](0003-use-iceberg-with-sql-catalog.md) | Use Apache Iceberg with a SQL catalog in Postgres | Accepted, implemented in Phase 1 step 2 | 2026-11-18 |
 | [0004](0004-hybrid-run-model.md) | Hybrid run model: full stack on the laptop, always-on version on free cloud tiers | Accepted | 2026-11-18 |
 | [0005](0005-use-opentofu.md) | Use OpenTofu for infrastructure as code | Accepted | 2026-11-18 |
 | [0006](0006-accept-unsigned-opentofu-providers.md) | Accept unsigned OpenTofu providers (Supabase, Vercel) | Accepted | 2026-11-18 |

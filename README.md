@@ -77,11 +77,17 @@ Prerequisites: Docker with Docker Compose v2, `make`, and about 3 GB of free RAM
    cp .env.example .env
    ```
 
-2. Start the core services (Postgres + pgvector, SeaweedFS, Airflow):
+2. Start the services. Profiles group them so the stack fits in about 4 GB of RAM:
+
+   | Profile | Services |
+   |---|---|
+   | `core` | Postgres + pgvector, SeaweedFS, Airflow |
+   | `query` | Trino (Iceberg lakehouse engine) |
 
    ```bash
-   make up            # same as: make up PROFILE=core
-   make ps            # wait until every service is "healthy" (Airflow takes 1-2 minutes)
+   make up                       # same as: make up PROFILE=core
+   make up PROFILE="core query"  # core plus Trino
+   make ps                       # wait until every service is "healthy" (Airflow takes 1-2 minutes)
    ```
 
 3. Open the services:
@@ -93,6 +99,7 @@ Prerequisites: Docker with Docker Compose v2, `make`, and about 3 GB of free RAM
    | SeaweedFS filer UI | http://localhost:8888/buckets/ | none (read-only file browser, local only) |
    | SeaweedFS master UI | http://localhost:9333 | none (cluster status) |
    | Postgres | `localhost:5432`, database `wanderlake` | `POSTGRES_USER` / `POSTGRES_PASSWORD` from `.env` |
+   | Trino (profile `query`) | http://localhost:8081 (web UI), or `make trino` | any user name, no password (local only) |
 
    On first start, the one-shot `s3-init` container creates the `raw` and `lakehouse` buckets.
 
@@ -110,7 +117,7 @@ Prerequisites: Docker with Docker Compose v2, `make`, and about 3 GB of free RAM
    make down
    ```
 
-   To also delete all data, run `docker compose --env-file .env -f infra/compose/compose.yaml --profile core down -v`.
+   `make down` stops the services of every profile. To also delete all data, run `docker compose --env-file .env -f infra/compose/compose.yaml --profile '*' down -v`.
 
 ### Browsing object storage from the command line
 
@@ -136,7 +143,29 @@ docker exec -it wanderlake-seaweedfs-1 weed shell
 > fs.ls /buckets/raw
 ```
 
-## Cities
+## Lakehouse
+
+Lakehouse tables are [Apache Iceberg](https://iceberg.apache.org/) tables queried with Trino ([ADR-0003](docs/adr/0003-use-iceberg-with-sql-catalog.md)):
+
+- **Catalog:** Iceberg JDBC catalog in Postgres (database `iceberg_catalog`, its own role).
+- **Data files:** the SeaweedFS bucket `lakehouse`, under `s3://lakehouse/warehouse/`.
+- **Layers** (one Iceberg schema each): `bronze` (raw data as delivered), `silver` (cleaned and conformed), `gold` (modelled for the API, website and dashboards).
+
+```bash
+make up PROFILE="core query"   # Trino needs Postgres and SeaweedFS from core
+make lakehouse-init            # create the bronze, silver and gold schemas (idempotent)
+make lakehouse-smoke-test      # write, read and drop a test table; shows its files
+make trino                     # interactive Trino shell on the iceberg catalog
+```
+
+Example queries in the Trino shell:
+
+```sql
+SHOW SCHEMAS FROM iceberg;
+SHOW TABLES FROM iceberg.bronze;
+SELECT * FROM iceberg.bronze."<table>$snapshots";   -- Iceberg table history
+```
+
 
 [`config/cities.yaml`](config/cities.yaml) is the single source of truth for the cities Wanderlake covers. Every city-aware connector reads it through `ingestion.config.load_cities()`, which validates it (unique slug ids, ISO country and currency codes, coordinate ranges, IANA time zone, `rate_source`).
 

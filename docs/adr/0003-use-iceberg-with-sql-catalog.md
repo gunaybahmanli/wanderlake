@@ -1,6 +1,6 @@
 # ADR-0003: Use Apache Iceberg with a SQL catalog in Postgres
 
-- **Status:** Accepted (implementation in Phase 1)
+- **Status:** Accepted, implemented in Phase 1 step 2
 - **Date:** 2026-11-18
 
 ## Context
@@ -25,7 +25,22 @@ Use Apache Iceberg as the table format, with Iceberg's SQL (JDBC) catalog stored
 - Spark, Trino and PyIceberg all connect to the same catalog type, configured from environment
   variables.
 
-Nothing in the repository implements this yet; it is the design that Phase 1 builds.
+### Implementation (Phase 1 step 2)
+
+- **Engine:** Trino 484 (`trinodb/trino:484`), compose profile `query`, catalog file
+  `infra/compose/trino/catalog/iceberg.properties` (Trino catalog name `iceberg`).
+- **Catalog:** `iceberg.catalog.type=jdbc`, `iceberg.jdbc-catalog.catalog-name=wanderlake`,
+  PostgreSQL driver, database `iceberg_catalog` owned by its own role (`ICEBERG_CATALOG_DB_USER`),
+  JDBC catalog schema version V1 (the default). Trino requires the catalog tables to exist, so
+  `infra/compose/postgres/init/02-iceberg-catalog.sh` creates the database, role and tables
+  (DDL from Iceberg 1.12.0, the version bundled in Trino 484), both on a fresh volume and, through
+  the one-shot `catalog-db-init` service, on an existing one.
+- **Storage:** `iceberg.jdbc-catalog.default-warehouse-dir=s3://lakehouse/warehouse`, Trino's
+  native S3 file system (`fs.s3.enabled=true`) with `s3.endpoint=http://seaweedfs:8333` and
+  `s3.path-style-access=true`. Credentials come from the generic `S3_*` variables.
+- **Layers:** schemas `bronze`, `silver` and `gold` at `s3://lakehouse/warehouse/<layer>/`
+  (`make lakehouse-init`).
+- The cloud catalog (Supabase) follows the same settings when the cloud lakehouse is built.
 
 ## Alternatives considered
 
