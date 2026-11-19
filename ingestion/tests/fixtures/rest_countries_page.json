@@ -1,0 +1,312 @@
+{
+  "data": {
+    "objects": [
+      {
+        "names": {
+          "common": "Macau",
+          "official": "Macao Special Administrative Region of the People's Republic of China"
+        },
+        "codes": {
+          "alpha_2": "MO",
+          "alpha_3": "MAC"
+        },
+        "capitals": [],
+        "flag": {
+          "url_png": "https://flags.restcountries.com/v5/w640/mo.png"
+        },
+        "region": "Asia",
+        "subregion": "Eastern Asia",
+        "area": {
+          "kilometers": 30
+        },
+        "classification": {
+          "sovereign": false,
+          "un_member": false
+        },
+        "coordinates": {
+          "lat": 22.16666666,
+          "lng": 113.55
+        },
+        "currencies": [
+          {
+            "code": "MOP",
+            "name": "Macanese pataca",
+            "symbol": "P"
+          }
+        ],
+        "languages": [
+          {
+            "bcp47": "pt",
+            "iso639_1": "pt",
+            "iso639_2b": "por",
+            "iso639_2t": "por",
+            "iso639_3": "por",
+            "name": "Portuguese",
+            "native_name": "português"
+          },
+          {
+            "bcp47": "zh",
+            "iso639_1": "zh",
+            "iso639_2b": "chi",
+            "iso639_2t": "zho",
+            "iso639_3": "zho",
+            "name": "Chinese",
+            "native_name": "中文"
+          }
+        ],
+        "population": 686500,
+        "timezones": [
+          "UTC+08:00"
+        ],
+        "_meta": {
+          "lastUpdatedTimestamp": 1794556089
+        }
+      },
+      {
+        "names": {
+          "common": "Netherlands",
+          "official": "Kingdom of the Netherlands"
+        },
+        "codes": {
+          "alpha_2": "NL",
+          "alpha_3": "NLD"
+        },
+        "capitals": [
+          {
+            "attributes": {
+              "administrative": false,
+              "constitutional": false,
+              "executive": false,
+              "judicial": false,
+              "legislative": false,
+              "primary": true
+            },
+            "coordinates": {
+              "lat": 52.35,
+              "lng": 4.92
+            },
+            "name": "Amsterdam"
+          }
+        ],
+        "flag": {
+          "url_png": "https://flags.restcountries.com/v5/w640/nl.png"
+        },
+        "region": "Europe",
+        "subregion": "Western Europe",
+        "area": {
+          "kilometers": 41850
+        },
+        "classification": {
+          "sovereign": true,
+          "un_member": true
+        },
+        "coordinates": {
+          "lat": 52.5,
+          "lng": 5.75
+        },
+        "currencies": [
+          {
+            "code": "EUR",
+            "name": "Euro",
+            "symbol": "€"
+          }
+        ],
+        "languages": [
+          {
+            "bcp47": "nl",
+            "iso639_1": "nl",
+            "iso639_2b": "dut",
+            "iso639_2t": "nld",
+            "iso639_3": "nld",
+            "name": "Dutch",
+            "native_name": "Nederlands"
+          }
+        ],
+        "population": 18192693,
+        "timezones": [
+          "UTC+01:00"
+        ],
+        "_meta": {
+          "lastUpdatedTimestamp": 1794510671
+        }
+      },
+      {
+        "names": {
+          "common": "Palestine",
+          "official": "State of Palestine"
+        },
+        "codes": {
+          "alpha_2": "PS",
+          "alpha_3": "PSE"
+        },
+        "capitals": [
+          {
+            "attributes": {
+              "administrative": true,
+              "constitutional": false,
+              "executive": false,
+              "judicial": false,
+              "legislative": false,
+              "primary": false
+            },
+            "coordinates": {
+              "lat": 31.9038,
+              "lng": 35.2034
+            },
+            "name": "Ramallah"
+          },
+          {
+            "attributes": {
+              "administrative": false,
+              "constitutional": false,
+              "executive": false,
+              "judicial": false,
+              "legislative": false,
+              "primary": false
+            },
+            "coordinates": {
+              "lat": 31.78,
+              "lng": 35.22
+            },
+            "name": "Jerusalem"
+          }
+        ],
+        "flag": {
+          "url_png": "https://flags.restcountries.com/v5/w640/ps.png"
+        },
+        "region": "Asia",
+        "subregion": "Western Asia",
+        "area": {
+          "kilometers": 6220
+        },
+        "classification": {
+          "sovereign": true,
+          "un_member": false
+        },
+        "coordinates": {
+          "lat": 31.9,
+          "lng": 35.2
+        },
+        "currencies": [
+          {
+            "code": "EGP",
+            "name": "Egyptian pound",
+            "symbol": "ج.م"
+          },
+          {
+            "code": "ILS",
+            "name": "Israeli new shekel",
+            "symbol": "₪"
+          },
+          {
+            "code": "JOD",
+            "name": "Jordanian dinar",
+            "symbol": "د.ا"
+          }
+        ],
+        "languages": [
+          {
+            "bcp47": "ar",
+            "iso639_1": "ar",
+            "iso639_2b": "ara",
+            "iso639_2t": "ara",
+            "iso639_3": "ara",
+            "name": "Arabic",
+            "native_name": "العربية"
+          }
+        ],
+        "population": 5557096,
+        "timezones": [
+          "UTC+02:00"
+        ],
+        "_meta": {
+          "lastUpdatedTimestamp": 1788724018
+        }
+      },
+      {
+        "capitals": [
+          {
+            "attributes": {
+              "administrative": false,
+              "constitutional": false,
+              "executive": false,
+              "judicial": false,
+              "legislative": false,
+              "primary": true
+            },
+            "coordinates": {
+              "lat": 43.0033,
+              "lng": 41.0153
+            },
+            "name": "Sukhumi"
+          }
+        ],
+        "currencies": [
+          {
+            "code": "RUB",
+            "name": "Russian ruble",
+            "symbol": "₽"
+          }
+        ],
+        "coordinates": {
+          "lat": 43,
+          "lng": 41
+        },
+        "codes": {
+          "alpha_2": "",
+          "alpha_3": ""
+        },
+        "names": {
+          "common": "Abkhazia",
+          "official": "Republic of Abkhazia"
+        },
+        "population": 244236,
+        "flag": {
+          "url_png": ""
+        },
+        "area": {
+          "kilometers": 8665
+        },
+        "classification": {
+          "sovereign": true,
+          "un_member": false
+        },
+        "languages": [
+          {
+            "bcp47": "ab",
+            "iso639_1": "ab",
+            "iso639_2b": "abk",
+            "iso639_2t": "abk",
+            "iso639_3": "abk",
+            "name": "Abkhaz",
+            "native_name": "Аҧсуа бызшәа"
+          },
+          {
+            "bcp47": "ru",
+            "iso639_1": "ru",
+            "iso639_2b": "rus",
+            "iso639_2t": "rus",
+            "iso639_3": "rus",
+            "name": "Russian",
+            "native_name": "русский"
+          }
+        ],
+        "subregion": "Western Asia",
+        "_meta": {
+          "lastUpdatedTimestamp": 1788557516
+        },
+        "timezones": [
+          "UTC+03:00"
+        ],
+        "region": "Asia"
+      }
+    ],
+    "meta": {
+      "total": 4,
+      "count": 4,
+      "limit": 100,
+      "offset": 0,
+      "more": false
+    }
+  }
+}

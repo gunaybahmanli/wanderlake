@@ -198,6 +198,7 @@ The Airflow container mounts `config/` read-only at `/opt/wanderlake/config`, so
 |---|---|---|---|
 | `frankfurter_rates` | daily 16:30 | [Frankfurter API](https://frankfurter.dev), ECB reference rates, base EUR | raw `s3://raw/frankfurter/rates/date=YYYY-MM-DD/rates.json`, then bronze `iceberg.bronze.frankfurter_rates` |
 | `cbar_rates` | daily 16:30 | [CBAR](https://www.cbar.az) official rates, AZN per foreign unit | raw `s3://raw/cbar/rates/date=YYYY-MM-DD/rates.xml`, then bronze `iceberg.bronze.cbar_rates` |
+| `rest_countries` | weekly, Mon 03:00 | [REST Countries](https://restcountries.com) v5 reference data (API key) | raw `s3://raw/rest_countries/all/snapshot_date=YYYY-MM-DD/page=N.json`, then bronze `iceberg.bronze.rest_countries` |
 
 ### `frankfurter_rates`
 
@@ -237,6 +238,15 @@ Fetches the Central Bank of Azerbaijan's official rates from `https://www.cbar.a
 - `currency_name` is kept as published (Azerbaijani, e.g. `100 Yapon yeni`). The XML is parsed with `defusedxml` (no entity expansion, no external entities).
 
 Columns: `requested_date`, `rate_date`, `currency_code`, `currency_name`, `nominal` (int), `rate_azn` (`decimal(18, 6)`), plus the same four ingestion columns as Frankfurter.
+
+### `rest_countries` (reference data)
+
+A weekly full snapshot of country reference data from REST Countries **v5**, which needs a free API key (`REST_COUNTRIES_API_KEY` in `.env`; see the cloud runbook). v1-v4 (`/v3.1/all`) are deprecated and answer HTTP 200 with an error object, so the pipeline accepts only a real v5 country list.
+
+- **Raw:** the list comes in pages of at most 100 records (3 pages, about 254 entities); each page is stored unchanged. A rerun of the same date replaces its pages.
+- **Validation (fails loudly):** all pages present, at least 200 countries with an ISO 3166 code, no malformed or duplicate codes. Entities without an ISO code (e.g. Abkhazia) stay in raw but are left out of bronze.
+- **Cities check:** every `country_code` in `config/cities.yaml` must be in the snapshot, otherwise `load_bronze` fails before writing.
+- **Bronze** (`iceberg.bronze.rest_countries`, partitioned by year): one row per country and `snapshot_date` with names, codes, region, `capital` (the primary capital, else the first), population, area, coordinates, flag URL, `independent` (v5 `sovereign`) and `un_member`. **Nested values stay JSON strings** (`capitals_json`, `languages_json`, `currencies_json`, `timezones_json`); flattening them is the silver layer's job.
 
 Run and inspect it:
 

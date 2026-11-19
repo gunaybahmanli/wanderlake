@@ -198,6 +198,8 @@ services:
       ICEBERG_CATALOG_DB_HOST: postgres
       ICEBERG_CATALOG_DB_USER: ${ICEBERG_CATALOG_DB_USER:-iceberg}
       ICEBERG_CATALOG_DB_PASSWORD: ${ICEBERG_CATALOG_DB_PASSWORD:?set ICEBERG_CATALOG_DB_PASSWORD in .env}
+      # Source API keys (only for the DAGs that need them)
+      REST_COUNTRIES_API_KEY: ${REST_COUNTRIES_API_KEY:?set REST_COUNTRIES_API_KEY in .env}
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
       AIRFLOW__CORE__PARALLELISM: "2" # at most 2 task processes at once (memory)
