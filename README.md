@@ -92,6 +92,18 @@ Prerequisites: Docker with Docker Compose v2, `make`, and about 3 GB of free RAM
 
    Airflow runs on a custom image, `wanderlake-airflow:local`, built from [`infra/airflow/`](infra/airflow/): the official Airflow 3.4.0 image plus PyIceberg, Astronomer Cosmos, and dbt-trino in a separate virtualenv ([ADR-0007](docs/adr/0007-custom-airflow-image.md)). `make up` builds it the first time; after changing anything in `infra/airflow/`, run `make build` and then `make up` again.
 
+   **Memory tips (4 GB machines).** Airflow and Trino together use most of a 4 GB WSL machine, so switch between two modes instead of running everything at once:
+
+   ```bash
+   make mode-ingest   # postgres + seaweedfs + airflow; trino stopped (pipelines, backfills)
+   make mode-query    # postgres + seaweedfs + trino; airflow stopped (lakehouse queries)
+   ```
+
+   - Both modes work whether the containers exist or not, and they wait until the services are healthy. On a brand-new install, run `make up` once first: it also runs the one-shot bucket setup.
+   - Trino does not restart on its own (`restart: "no"`), so a WSL restart never brings the whole stack back at once.
+   - Run backfills one date at a time (`MAX_ACTIVE_RUNS=1`, the default).
+   - Stop the stack (`make down`) before building images (`make build`).
+
 3. Open the services:
 
    | Service | URL / port | Login |
