@@ -202,6 +202,7 @@ The Airflow container mounts `config/` read-only at `/opt/wanderlake/config`, so
 | `rest_countries` | weekly, Mon 03:00 | [REST Countries](https://restcountries.com) v5 reference data (API key) | raw `s3://raw/rest_countries/all/snapshot_date=YYYY-MM-DD/page=N.json`, then bronze `iceberg.bronze.rest_countries` |
 | `geonames_cities` | monthly, 1st 04:00 | [GeoNames](https://www.geonames.org) dump `cities15000.zip` (CC BY 4.0) | raw `s3://raw/geonames/cities15000/snapshot_date=YYYY-MM-DD/cities15000.zip`, then bronze `iceberg.bronze.geonames_cities` |
 | `open_meteo` | daily 05:00 | [Open-Meteo](https://open-meteo.com) forecast (7 days) and archive (last 7 days); CC BY 4.0 | raw `s3://raw/open_meteo/{forecast,history}/...`, then bronze `iceberg.bronze.open_meteo_forecast` and `iceberg.bronze.open_meteo_history` |
+| `fcdo_advice` | daily 06:00 | [GOV.UK](https://www.gov.uk/foreign-travel-advice) FCDO foreign travel advice (OGL v3.0) | raw `s3://raw/fcdo/advice/snapshot_date=YYYY-MM-DD/<country_code>.json`, then bronze `iceberg.bronze.fcdo_advice` |
 
 ### `frankfurter_rates`
 
@@ -276,6 +277,14 @@ Daily weather for every city in `config/cities.yaml`, in one request for all cit
 - **Validation:** the response must have one location per configured city, in order, with the city's timezone and a model grid point within 30 km. The raw metadata stores the requested `city_ids`, so a raw file can always be mapped back to cities.
 - **One-time history backfill** (2023-01-01 until 8 days ago, month by month, pausing 6 s between requests, about 1,000 API calls in total): `make weather-backfill` (`WEATHER_START=YYYY-MM-DD` to change the start). It is idempotent.
 
+### `fcdo_advice` (travel advisories)
+
+A daily snapshot of the UK Foreign, Commonwealth & Development Office travel advice for the countries of our cities, from the GOV.UK Content API (no key; at most 10 requests per second, this DAG makes 11 a day, 1 second apart).
+
+- **Country mapping without a hand-typed list:** GOV.UK has no ISO codes, so each `country_code` is resolved through official names: its `name_common`/`name_official` in the latest `bronze.rest_countries` snapshot, matched to an FCDO country name or one of its synonyms in the index (`https://www.gov.uk/api/content/foreign-travel-advice`). For example, `US` resolves to `usa` through the FCDO synonym "United States". The run fails if a country has no match or more than one (FCDO synonyms include city names). This DAG therefore needs `rest_countries` to have run at least once.
+- **Raw:** each country response unchanged, plus the index used for the mapping (`_index.json`).
+- **Bronze** (`iceberg.bronze.fcdo_advice`, partitioned by year): one row per country and `snapshot_date` with `slug`, `title`, `public_updated_at`, `change_description`, `alert_status_json` (e.g. `["avoid_all_but_essential_travel_to_parts"]`) and `parts_json` (the sections with their **HTML body unchanged**). Cleaning the HTML to text happens in silver; summaries come in phase 2.
+
 Run and inspect it:
 
 ```bash
@@ -313,6 +322,7 @@ How deploys work:
 ## Attribution
 
 - **Open-Meteo:** weather data by Open-Meteo.com (https://open-meteo.com/), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); history is based on ERA5/ERA5-Land reanalysis and ECMWF IFS data. The free API is used under its non-commercial terms. Wanderlake stores responses unchanged in raw and only types and reshapes them (one row per city and day) in bronze.
+- **FCDO travel advice:** contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/) (UK Foreign, Commonwealth & Development Office travel advice from GOV.UK). Stored unchanged in raw and bronze; any cleaned or summarised text in later layers is derived by Wanderlake.
 - **GeoNames:** city data (c) GeoNames (https://www.geonames.org), licensed under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0). The data is provided "as is" without warranty. Wanderlake stores it unchanged in raw and loads it, typed, into bronze; no other changes are made at that layer.
 
 ## Development
