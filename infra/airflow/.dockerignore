@@ -1,0 +1,4 @@
+# Only the Dockerfile and the requirement files are needed in the build context.
+*
+!requirements.txt
+!requirements-dbt.txt

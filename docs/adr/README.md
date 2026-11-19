@@ -11,6 +11,7 @@ and the consequences.
 | [0004](0004-hybrid-run-model.md) | Hybrid run model: full stack on the laptop, always-on version on free cloud tiers | Accepted | 2026-11-18 |
 | [0005](0005-use-opentofu.md) | Use OpenTofu for infrastructure as code | Accepted | 2026-11-18 |
 | [0006](0006-accept-unsigned-opentofu-providers.md) | Accept unsigned OpenTofu providers (Supabase, Vercel) | Accepted | 2026-11-18 |
+| [0007](0007-custom-airflow-image.md) | Custom Airflow image with dbt in a separate virtualenv | Accepted | 2026-11-19 |
 
 ## Adding an ADR
 

@@ -2,7 +2,7 @@
 .PHONY: help setup lint format test clean up down ps logs psql s3-ls backfill test-dags \
 	tofu-init tofu-fmt tofu-validate tofu-plan tofu-apply \
 	web-install web-dev web-lint web-build \
-	trino lakehouse-init lakehouse-smoke-test
+	trino lakehouse-init lakehouse-smoke-test build
 
 PROFILE ?= core
 SERVICE ?=
@@ -49,6 +49,9 @@ test-dags: ## Run DAG integrity tests inside the running Airflow container
 clean: ## Remove tool caches
 	@rm -rf .ruff_cache .pytest_cache
 	@find . -type d -name __pycache__ -not -path './.venv/*' -prune -exec rm -rf {} +
+
+build: ## Build the custom Airflow image (wanderlake-airflow:local) from infra/airflow
+	@$(COMPOSE_ALL) build airflow
 
 up: ## Start PROFILE (default core); several at once: make up PROFILE="core query"
 	@test -f .env || { echo "Missing .env: run 'cp .env.example .env' and fill it in."; exit 1; }

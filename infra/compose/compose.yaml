@@ -167,7 +167,10 @@ services:
   # Apache Airflow 3 (standalone: api-server, scheduler, dag-processor, triggerer)
   # ---------------------------------------------------------------------------
   airflow:
-    image: apache/airflow:3.4.0-python3.12
+    # Custom image: official apache/airflow 3.4.0 + PyIceberg, Cosmos, dbt (infra/airflow).
+    # Rebuild after changing infra/airflow: make build
+    build: ../airflow
+    image: wanderlake-airflow:local
     profiles: ["core"]
     restart: unless-stopped
     mem_limit: 2g
