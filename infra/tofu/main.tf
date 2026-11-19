@@ -42,10 +42,11 @@ resource "vercel_project" "wanderlake" {
   # Expose VERCEL_GIT_COMMIT_SHA and friends to the build (the footer shows the commit).
   automatically_expose_system_environment_variables = true
 
-  # Ignored build step (runs in web/): exit 0 = skip, 1 = build. Compares against the last
-  # deployed commit, so a branch builds if any commit since then touched web/. If that commit
-  # is unknown or missing from the clone, git errors (non-zero) and Vercel builds anyway.
-  ignore_command = "if [ -z \"$VERCEL_GIT_PREVIOUS_SHA\" ]; then exit 1; fi; git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- ."
+  # Ignored build step (runs in web/): exit 0 = skip, 1 = build. Vercel fails the deployment
+  # on any other exit code. Compares against the last deployed commit, so a branch builds if any
+  # commit since then touched web/. Vercel clones only recent history, so that commit can be
+  # missing (git would fail with exit 128, "bad object"): then build instead of failing.
+  ignore_command = "if [ -z \"$VERCEL_GIT_PREVIOUS_SHA\" ] || ! git cat-file -e \"$VERCEL_GIT_PREVIOUS_SHA^{commit}\" 2>/dev/null; then exit 1; fi; git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- ."
 
   # Keep Vercel's default: previews require a Vercel login, production is public.
   vercel_authentication = {
