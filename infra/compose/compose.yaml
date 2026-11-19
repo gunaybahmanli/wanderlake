@@ -2,7 +2,7 @@
 # Run from the repo root via the Makefile (make up / make down), which passes
 # --env-file .env and --profile. Relative paths below resolve from this folder.
 #
-# Memory budget (WSL2 = 4 GB). Limits: core = postgres 512m + seaweedfs 640m + airflow 1.5g;
+# Memory budget (WSL2 = 4 GB). Limits: core = postgres 512m + seaweedfs 640m + airflow 2g;
 # query = trino 1.2g. One-shot init containers run for a few seconds only.
 # Several profiles at once: make up PROFILE="core query".
 
@@ -177,7 +177,9 @@ services:
     image: wanderlake-airflow:local
     profiles: ["core"]
     restart: unless-stopped
-    mem_limit: 1536m # measured 0.9-1.1 GiB; lowered from 2g to leave room on a 4 GB WSL machine
+    # 2g: idle about 1.0 GiB, plus about 0.45 GiB per running task (Airflow 3 runs each task in its
+    # own supervisor + worker processes). Trino is stopped while Airflow works (make mode-ingest).
+    mem_limit: 2g
     user: "${AIRFLOW_UID:-50000}:0"
     depends_on:
       postgres:
@@ -202,7 +204,7 @@ services:
       REST_COUNTRIES_API_KEY: ${REST_COUNTRIES_API_KEY:?set REST_COUNTRIES_API_KEY in .env}
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-      AIRFLOW__CORE__PARALLELISM: "2" # at most 2 task processes at once (memory)
+      AIRFLOW__CORE__PARALLELISM: "1" # one task at a time: two tasks would need ~1.9 GiB
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:?set AIRFLOW__CORE__FERNET_KEY in .env}
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER:-airflow}:${AIRFLOW_DB_PASSWORD}@postgres:5432/airflow
       AIRFLOW__API__SECRET_KEY: ${AIRFLOW__API__SECRET_KEY:?set AIRFLOW__API__SECRET_KEY in .env}
