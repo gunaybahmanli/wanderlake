@@ -1,0 +1,96 @@
+{
+ "document_type": "travel_advice_index",
+ "title": "Foreign travel advice",
+ "links": {
+  "children": [
+   {
+    "api_url": "https://www.gov.uk/api/content/foreign-travel-advice/thailand",
+    "base_path": "/foreign-travel-advice/thailand",
+    "public_updated_at": "2026-10-12T09:20:34Z",
+    "title": "Thailand travel advice",
+    "details": {
+     "change_description": "Updated information about visa requirements for travellers entering Thailand by land or air (‘Entry requirements’ page).",
+     "country": {
+      "name": "Thailand",
+      "slug": "thailand",
+      "synonyms": []
+     }
+    }
+   },
+   {
+    "api_url": "https://www.gov.uk/api/content/foreign-travel-advice/usa",
+    "base_path": "/foreign-travel-advice/usa",
+    "public_updated_at": "2026-11-14T02:26:03Z",
+    "title": "USA travel advice",
+    "details": {
+     "change_description": "Updated information on air traffic disruptions across the US",
+     "country": {
+      "name": "USA",
+      "slug": "usa",
+      "synonyms": [
+       "United States",
+       "America",
+       "Arctic",
+       "Puerto Rico",
+       "US Virgin Islands",
+       "Florida",
+       "Orlando",
+       "American Samoa",
+       "Guam",
+       "Hawaii"
+      ]
+     }
+    }
+   },
+   {
+    "api_url": "https://www.gov.uk/api/content/foreign-travel-advice/azerbaijan",
+    "base_path": "/foreign-travel-advice/azerbaijan",
+    "public_updated_at": "2026-10-23T12:44:51Z",
+    "title": "Azerbaijan travel advice",
+    "details": {
+     "change_description": "New information about entry requirements for the upcoming FIFA U-15 World Cup and Festival 2026 and travelling on a UK Emergency Travel Document to Azerbaijan. Updated information about visa requirements and entering Azerbaijan across the land border from Iran ('Entry requirements' page).     ",
+     "country": {
+      "name": "Azerbaijan",
+      "slug": "azerbaijan",
+      "synonyms": [
+       "Baku",
+       "Nagorno-Karabakh",
+       "Nagorno",
+       "Karabakh"
+      ]
+     }
+    }
+   },
+   {
+    "api_url": "https://www.gov.uk/api/content/foreign-travel-advice/czechia",
+    "base_path": "/foreign-travel-advice/czechia",
+    "public_updated_at": "2026-08-11T09:18:36Z",
+    "title": "Czechia travel advice",
+    "details": {
+     "change_description": "Updated information on European Entry-Exit System (EES) (‘Entry requirements’ page).  ",
+     "country": {
+      "name": "Czechia",
+      "slug": "czechia",
+      "synonyms": [
+       "Czech Republic"
+      ]
+     }
+    }
+   },
+   {
+    "api_url": "https://www.gov.uk/api/content/foreign-travel-advice/japan",
+    "base_path": "/foreign-travel-advice/japan",
+    "public_updated_at": "2026-08-28T15:22:35Z",
+    "title": "Japan travel advice",
+    "details": {
+     "change_description": "Addition of information about flooding and heavy rain ('Safety and security' page).",
+     "country": {
+      "name": "Japan",
+      "slug": "japan",
+      "synonyms": []
+     }
+    }
+   }
+  ]
+ }
+}

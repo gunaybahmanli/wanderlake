@@ -1,0 +1,53 @@
+{
+ "title": "Thailand travel advice",
+ "document_type": "travel_advice",
+ "schema_name": "travel_advice",
+ "base_path": "/foreign-travel-advice/thailand",
+ "public_updated_at": "2026-10-12T10:20:34+01:00",
+ "updated_at": "2026-11-17T15:11:32+00:00",
+ "locale": "en",
+ "details": {
+  "alert_status": [
+   "avoid_all_but_essential_travel_to_parts"
+  ],
+  "change_description": "Updated information about visa requirements for travellers entering Thailand by land or air (‘Entry requirements’ page).",
+  "country": {
+   "name": "Thailand",
+   "slug": "thailand",
+   "synonyms": []
+  },
+  "reviewed_at": "2026-10-12T09:20:34Z",
+  "parts": [
+   {
+    "slug": "warnings-and-insurance",
+    "title": "Warnings and insurance",
+    "body": "\n<div role=\"note\" aria-label=\"Warning\" class=\"application-notice help-notice\">\n<p>Your travel insurance could be invalidated if you travel against advice from the Foreign, Commonwealth &amp; Development Office (FCDO).</p>\n</div>\n\n<h2 id=\"areas-where-fcdo-advises-against-travel\">Areas where <abbr title=\"Foreign, Commonwealth &amp; Development Office\">FCDO</abbr> advises against travel</h2>\n\n<h2 id=</p>"
+   },
+   {
+    "slug": "entry-requirements",
+    "title": "Entry requirements",
+    "body": "<p>This information is for people travelling on a full <a href=\"https://www.gov.uk/types-of-british-nationality\">‘British citizen’ passport</a> from the UK. It is based on the UK government’s understanding of the current rules for the most common types of travel.</p>\n\n<p>The authorities in Thailand set and enforce entry rules. If you’re not sure how these requirements apply to you, contact the <a </p>"
+   },
+   {
+    "slug": "safety-and-security",
+    "title": "Safety and security",
+    "body": "<p>This guide also has safety advice for <a href=\"/foreign-travel-advice/thailand/regional-risks\">regions of Thailand</a>.</p>\n\n<h2 id=\"terrorism\">Terrorism</h2>\n\n<p>There is a high threat of terrorist attack globally affecting UK interests and British nationals, including from groups and individuals who view the UK and British nationals as targets. Stay aware of your surroundings at all times.</p</p>"
+   },
+   {
+    "slug": "regional-risks",
+    "title": "Regional risks",
+    "body": "<p>This section has safety advice for regions of Thailand. It only covers regions where <abbr title=\"Foreign, Commonwealth &amp; Development Office\">FCDO</abbr> has specific advice.</p>\n\n<p>You should also read <a href=\"/foreign-travel-advice/thailand\"><abbr title=\"Foreign, Commonwealth &amp; Development Office\">FCDO</abbr>’s overall travel advice</a> and <a href=\"/foreign-travel-advice/thailand/s</p>"
+   },
+   {
+    "slug": "health",
+    "title": "Health",
+    "body": "<p>Before you travel check that:</p>\n\n<ul>\n  <li>your destination can provide the healthcare you may need</li>\n  <li>you have <a href=\"https://www.gov.uk/guidance/foreign-travel-insurance\">appropriate travel insurance</a> for local treatment or unexpected medical evacuation</li>\n</ul>\n\n<p>This is particularly important if you have a health condition or are pregnant.</p>\n\n<h2 id=\"emergency-medical-</p>"
+   },
+   {
+    "slug": "getting-help",
+    "title": "Getting help",
+    "body": "<p>The Foreign, Commonwealth &amp; Development Office (<abbr title=\"Foreign, Commonwealth &amp; Development Office\">FCDO</abbr>) cannot provide tailored advice for individual trips. Read this travel advice and carry out your own research before deciding whether to travel.</p>\n\n<h2 id=\"emergency-services-in-thailand\">Emergency services in Thailand</h2>\n\n<p>Telephone: 191 (ambulance, fire, police)</</p>"
+   }
+  ]
+ }
+}

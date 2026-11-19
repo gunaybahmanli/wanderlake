@@ -1,0 +1,51 @@
+{
+ "title": "Japan travel advice",
+ "document_type": "travel_advice",
+ "schema_name": "travel_advice",
+ "base_path": "/foreign-travel-advice/japan",
+ "public_updated_at": "2026-08-28T16:22:35+01:00",
+ "updated_at": "2026-11-12T12:15:47+00:00",
+ "locale": "en",
+ "details": {
+  "alert_status": [],
+  "change_description": "Addition of information about flooding and heavy rain ('Safety and security' page).",
+  "country": {
+   "name": "Japan",
+   "slug": "japan",
+   "synonyms": []
+  },
+  "reviewed_at": "2026-08-28T15:22:35Z",
+  "parts": [
+   {
+    "slug": "warnings-and-insurance",
+    "title": "Warnings and insurance",
+    "body": "<div class=\"call-to-action\">\n  <h2 id=\"global-travel-impacts-due-to-escalation-in-the-middle-east\">Global travel impacts due to escalation in the Middle East</h2>\n\n  <p>Escalation in the Middle East has caused widespread travel disruption, including airspace closures, delayed and cancelled flights.</p>\n\n  <p>Your travel plans may be affected, even if your destination is not in the Middle East. Bef</p>"
+   },
+   {
+    "slug": "entry-requirements",
+    "title": "Entry requirements",
+    "body": "<p>This information is for people travelling on a full <a href=\"https://www.gov.uk/types-of-british-nationality\">‘British citizen’ passport</a> from the UK. It is based on the UK government’s understanding of the current rules for the most common types of travel.</p>\n\n<p>The authorities in Japan set and enforce entry rules. If you’re not sure how these requirements apply to you, contact the <a rel</p>"
+   },
+   {
+    "slug": "safety-and-security",
+    "title": "Safety and security",
+    "body": "<p>This guide also has safety advice for <a href=\"/foreign-travel-advice/japan/regional-risks\">regions of Japan</a>.</p>\n\n<h2 id=\"terrorism\">Terrorism</h2>\n\n<p>There is a high threat of terrorist attack globally affecting UK interests and British nationals, including from groups and individuals who view the UK and British nationals as targets. Stay aware of your surroundings at all times.</p>\n\n<p></p>"
+   },
+   {
+    "slug": "regional-risks",
+    "title": "Regional risks",
+    "body": "<p>This section has safety advice for regions of Japan. It only covers regions where <abbr title=\"Foreign, Commonwealth &amp; Development Office\">FCDO</abbr> has specific advice.</p>\n\n<p>You should also read <a href=\"/foreign-travel-advice/japan\"><abbr title=\"Foreign, Commonwealth &amp; Development Office\">FCDO</abbr>’s overall travel advice</a> and <a href=\"/foreign-travel-advice/japan/safety-and</p>"
+   },
+   {
+    "slug": "health",
+    "title": "Health",
+    "body": "<p>Before you travel check that:</p>\n\n<ul>\n  <li>your destination can provide the healthcare you may need</li>\n  <li>you have appropriate travel insurance for local treatment or unexpected medical evacuation</li>\n</ul>\n\n<p>This is particularly important if you have a health condition or are pregnant.</p>\n\n<h2 id=\"emergency-medical-number\">Emergency medical number</h2>\n\n<p>Dial 119 and ask for an a</p>"
+   },
+   {
+    "slug": "getting-help",
+    "title": "Getting help",
+    "body": "<p>The Foreign, Commonwealth &amp; Development Office (<abbr title=\"Foreign, Commonwealth &amp; Development Office\">FCDO</abbr>) cannot provide tailored advice for individual trips. Read this travel advice and carry out your own research before deciding whether to travel.</p>\n\n<h2 id=\"emergency-services-in-japan\">Emergency services in Japan</h2>\n\n<p>Ambulance: 119</p>\n\n<p>Fire: 119</p>\n\n<p>Police:</p>"
+   }
+  ]
+ }
+}
