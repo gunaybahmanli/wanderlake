@@ -102,6 +102,7 @@ Prerequisites: Docker with Docker Compose v2, `make`, and about 3 GB of free RAM
    - Both modes work whether the containers exist or not, and they wait until the services are healthy. On a brand-new install, run `make up` once first: it also runs the one-shot bucket setup.
    - Trino does not restart on its own (`restart: "no"`), so a WSL restart never brings the whole stack back at once.
    - Run backfills one date at a time (`MAX_ACTIVE_RUNS=1`, the default).
+   - **One Airflow task at a time** (`AIRFLOW__CORE__PARALLELISM=1`, `mem_limit: 2g`). Airflow idles at about 1.0 GiB, and every running task adds about 0.45 GiB, because Airflow 3 runs each task in its own supervisor and worker processes (the GeoNames load measured 1.48 GiB at its peak). Two tasks at once, such as `frankfurter_rates` and `cbar_rates` at 16:30, could pass 1.9 GiB, so tasks queue instead; that costs about a minute a day. This is sized for an 8 GB laptop with WSL limited to 4 GB: **revisit both settings after the RAM upgrade.**
    - Stop the stack (`make down`) before building images (`make build`).
 
 3. Open the services:
