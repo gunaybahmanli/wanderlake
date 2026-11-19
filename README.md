@@ -201,6 +201,7 @@ The Airflow container mounts `config/` read-only at `/opt/wanderlake/config`, so
 | `cbar_rates` | daily 16:30 | [CBAR](https://www.cbar.az) official rates, AZN per foreign unit | raw `s3://raw/cbar/rates/date=YYYY-MM-DD/rates.xml`, then bronze `iceberg.bronze.cbar_rates` |
 | `rest_countries` | weekly, Mon 03:00 | [REST Countries](https://restcountries.com) v5 reference data (API key) | raw `s3://raw/rest_countries/all/snapshot_date=YYYY-MM-DD/page=N.json`, then bronze `iceberg.bronze.rest_countries` |
 | `geonames_cities` | monthly, 1st 04:00 | [GeoNames](https://www.geonames.org) dump `cities15000.zip` (CC BY 4.0) | raw `s3://raw/geonames/cities15000/snapshot_date=YYYY-MM-DD/cities15000.zip`, then bronze `iceberg.bronze.geonames_cities` |
+| `open_meteo` | daily 05:00 | [Open-Meteo](https://open-meteo.com) forecast (7 days) and archive (last 7 days); CC BY 4.0 | raw `s3://raw/open_meteo/{forecast,history}/...`, then bronze `iceberg.bronze.open_meteo_forecast` and `iceberg.bronze.open_meteo_history` |
 
 ### `frankfurter_rates`
 
@@ -260,6 +261,21 @@ A monthly snapshot of the free GeoNames dump of cities with a population above 1
 - **Cities link:** every city in `config/cities.yaml` has a `geonames_id`, matched by country, name and the closest distance, preferring the feature codes PPLC/PPLA/PPL (`match_city`). `load_bronze` fails before writing if a configured id is missing from the snapshot.
 - **Bronze** (`iceberg.bronze.geonames_cities`, partitioned by year): all 19 GeoNames columns plus `snapshot_date` and the four ingestion columns; `alternatenames` is kept as received.
 
+### `open_meteo` (weather)
+
+Daily weather for every city in `config/cities.yaml`, in one request for all cities (each in its own timezone, metric units). Free API, used under its non-commercial terms (fewer than 10,000 calls a day; this pipeline uses about 22).
+
+| | Forecast | History |
+|---|---|---|
+| Source | `https://api.open-meteo.com/v1/forecast`, 7 days ahead | `https://archive-api.open-meteo.com/v1/archive` (ERA5/ERA5-Land reanalysis; newest days from ECMWF IFS) |
+| Raw | `s3://raw/open_meteo/forecast/run_date=YYYY-MM-DD/forecast.json` | daily `.../history/date=YYYY-MM-DD/history.json`; backfill `.../history/backfill/month=YYYY-MM/history.json` |
+| Bronze | `iceberg.bronze.open_meteo_forecast`: `run_date`, `city_id`, `forecast_date`, variables; partitioned by month, replaced per `run_date` | `iceberg.bronze.open_meteo_history`: `city_id`, `weather_date`, variables; partitioned by year, replaced per date range |
+
+- **Variables:** `weather_code`, `temperature_2m_max/min/mean`, `precipitation_sum`, `rain_sum`, `snowfall_sum`, `precipitation_hours`, `wind_speed_10m_max`, `sunshine_duration` (seconds); the forecast adds `uv_index_max` and `precipitation_probability_max`.
+- **Recent history is provisional:** the archive's newest days come from a forecast model and are revised when the ERA5 reanalysis arrives (about 5 days later). The daily run therefore re-fetches the last 7 days; reloads replace that date range, so they never duplicate.
+- **Validation:** the response must have one location per configured city, in order, with the city's timezone and a model grid point within 30 km. The raw metadata stores the requested `city_ids`, so a raw file can always be mapped back to cities.
+- **One-time history backfill** (2023-01-01 until 8 days ago, month by month, pausing 6 s between requests, about 1,000 API calls in total): `make weather-backfill` (`WEATHER_START=YYYY-MM-DD` to change the start). It is idempotent.
+
 Run and inspect it:
 
 ```bash
@@ -296,6 +312,7 @@ How deploys work:
 
 ## Attribution
 
+- **Open-Meteo:** weather data by Open-Meteo.com (https://open-meteo.com/), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); history is based on ERA5/ERA5-Land reanalysis and ECMWF IFS data. The free API is used under its non-commercial terms. Wanderlake stores responses unchanged in raw and only types and reshapes them (one row per city and day) in bronze.
 - **GeoNames:** city data (c) GeoNames (https://www.geonames.org), licensed under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0). The data is provided "as is" without warranty. Wanderlake stores it unchanged in raw and loads it, typed, into bronze; no other changes are made at that layer.
 
 ## Development

@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import hashlib
 import io
-import math
 import tempfile
 import zipfile
 from dataclasses import dataclass
@@ -41,6 +40,7 @@ from pyiceberg.types import (
     TimestamptzType,
 )
 
+from ingestion.common.geo import haversine_km
 from ingestion.common.http import build_session
 from ingestion.common.iceberg import ensure_table, replace_rows
 from ingestion.common.logging import get_logger, log_event
@@ -224,15 +224,6 @@ def ingest_snapshot(
 
 
 # --- city matching ------------------------------------------------------------------------------
-
-
-def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    p = math.pi / 180
-    h = (
-        math.sin((lat2 - lat1) * p / 2) ** 2
-        + math.cos(lat1 * p) * math.cos(lat2 * p) * math.sin((lon2 - lon1) * p / 2) ** 2
-    )
-    return 2 * 6371.0088 * math.asin(math.sqrt(h))
 
 
 @dataclass(frozen=True)
