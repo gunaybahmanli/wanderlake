@@ -2,7 +2,7 @@
 .PHONY: help setup lint format test clean up down ps logs psql s3-ls backfill test-dags \
 	tofu-init tofu-fmt tofu-validate tofu-plan tofu-apply \
 	web-install web-dev web-lint web-build \
-	trino lakehouse-init lakehouse-smoke-test build
+	trino lakehouse-init lakehouse-smoke-test build mode-query mode-ingest
 
 PROFILE ?= core
 SERVICE ?=
@@ -58,6 +58,18 @@ build: ## Build the custom Airflow image (wanderlake-airflow:local) from infra/a
 up: ## Start PROFILE (default core); several at once: make up PROFILE="core query"
 	@test -f .env || { echo "Missing .env: run 'cp .env.example .env' and fill it in."; exit 1; }
 	@$(COMPOSE) up -d
+
+# Modes for a 4 GB machine: Airflow and Trino are not meant to run together for long.
+# Both work whether the containers exist yet or not (compose creates what is missing).
+mode-query: ## Query mode: postgres + seaweedfs + trino running, airflow stopped
+	@$(COMPOSE_ALL) stop airflow
+	@$(COMPOSE_ALL) up -d --wait postgres seaweedfs trino
+	@$(COMPOSE_ALL) ps --format 'table {{.Service}}\t{{.Status}}'
+
+mode-ingest: ## Ingest mode: core profile running (postgres, seaweedfs, airflow), trino stopped
+	@$(COMPOSE_ALL) stop trino
+	@$(COMPOSE_BASE) --profile core up -d --wait postgres seaweedfs airflow
+	@$(COMPOSE_ALL) ps --format 'table {{.Service}}\t{{.Status}}'
 
 down: ## Stop all services of every profile (data volumes are kept)
 	@$(COMPOSE_ALL) down
