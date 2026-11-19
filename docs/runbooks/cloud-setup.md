@@ -20,6 +20,7 @@ OpenTofu in [`infra/tofu`](../../infra/tofu):
 | `TF_VAR_supabase_db_password` | Supabase database | root `.env` | GitHub Actions secret |
 | `TF_VAR_state_passphrase` | OpenTofu state encryption | root `.env` **and your password manager** | GitHub Actions secret |
 | `VERCEL_API_TOKEN` | Vercel provider | root `.env` | GitHub Actions secret |
+| `REST_COUNTRIES_API_KEY` | `rest_countries` DAG (Airflow) | root `.env` | GitHub Actions secret (when a cloud job runs it) |
 
 Rules:
 
@@ -80,6 +81,18 @@ The token's scope is also its default team, so the provider needs no `team` sett
 projects, domains and deployments in that team only. Deployments themselves do not use the token:
 Vercel builds from GitHub pushes through the GitHub app.
 
+### REST Countries (source API)
+
+REST Countries v1-v4 (`restcountries.com/v3.1/...`) are deprecated; v5 needs an API key.
+
+1. Create a free account at https://restcountries.com (Free plan: $0, 1,000 requests a month,
+   2 API keys, data synced every 24 h, no credit card).
+2. Create an API key on the API Keys page and store it as `REST_COUNTRIES_API_KEY` in `.env`.
+   Compose passes it to the Airflow container only.
+
+Usage: one weekly snapshot is 3 requests (100 records per request on the free plan), about
+13 requests a month. The rate limit is 20 requests per 10 seconds.
+
 ### Token expiry log
 
 Update this table whenever a token is created or rotated.
@@ -89,6 +102,7 @@ Update this table whenever a token is created or rotated.
 | `CLOUDFLARE_API_TOKEN` | YYYY-MM-DD | YYYY-MM-DD | |
 | `SUPABASE_ACCESS_TOKEN` | YYYY-MM-DD | YYYY-MM-DD (created + 90 days) | |
 | `VERCEL_API_TOKEN` | YYYY-MM-DD | YYYY-MM-DD (created + 90 days) | |
+| `REST_COUNTRIES_API_KEY` | 2026-11-19 | see the API Keys page (revoke there) | |
 
 ## OpenTofu state and its encryption
 
@@ -175,6 +189,13 @@ General rule: **create the new credential, switch to it, verify, then revoke the
 4. Delete the old token in Account Settings > Tokens. Update the expiry log.
 
 Deployments keep working during rotation: they come from the GitHub app, not the token.
+
+### REST Countries API key
+
+1. Create a second key on the API Keys page (the free plan allows 2).
+2. Replace `REST_COUNTRIES_API_KEY` in `.env`, then recreate Airflow (`make mode-ingest`).
+3. Trigger `rest_countries` once and check that both tasks succeed.
+4. Revoke the old key. Update the expiry log.
 
 ### Supabase database password
 

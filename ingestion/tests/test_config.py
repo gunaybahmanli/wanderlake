@@ -30,6 +30,7 @@ VALID_CITY = {
     "currency": "EUR",
     "rate_source": "ecb",
     "inside_airbnb": True,
+    "geonames_id": 3169070,
 }
 
 
@@ -159,4 +160,27 @@ def test_empty_city_list_is_rejected(tmp_path: Path) -> None:
     path.write_text("cities: []\n")
 
     with pytest.raises(CityConfigError):
+        load_cities(path)
+
+
+def test_real_file_geonames_ids() -> None:
+    by_id = {c.id: c.geonames_id for c in load_cities()}
+
+    assert by_id["baku"] == 587084
+    assert by_id["new-york-city"] == 5128581
+    assert len(set(by_id.values())) == 10
+
+
+def test_duplicate_geonames_id_is_rejected(tmp_path: Path) -> None:
+    path = write_cities(tmp_path, city(), city(id="roma"))
+
+    with pytest.raises(CityConfigError, match="duplicate geonames_id\\(s\\): 3169070"):
+        load_cities(path)
+
+
+@pytest.mark.parametrize("value", [0, -5, "abc"])
+def test_invalid_geonames_id_is_rejected(tmp_path: Path, value: object) -> None:
+    path = write_cities(tmp_path, city(geonames_id=value))
+
+    with pytest.raises(CityConfigError, match=r"\(rome\)\.geonames_id"):
         load_cities(path)

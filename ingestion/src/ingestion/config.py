@@ -66,6 +66,7 @@ class City(BaseModel):
     currency: CurrencyCode
     rate_source: Literal["ecb", "cbar"]
     inside_airbnb: bool | None
+    geonames_id: Annotated[int, Field(gt=0)]
 
     @field_validator("timezone")
     @classmethod
@@ -92,6 +93,10 @@ class CityConfig(BaseModel):
         duplicates = sorted({i for i in ids if ids.count(i) > 1})
         if duplicates:
             raise ValueError(f"duplicate city id(s): {', '.join(duplicates)}")
+        gids = [c.geonames_id for c in self.cities]
+        dup_gids = sorted({g for g in gids if gids.count(g) > 1})
+        if dup_gids:
+            raise ValueError(f"duplicate geonames_id(s): {', '.join(map(str, dup_gids))}")
         return self
 
 
