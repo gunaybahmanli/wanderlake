@@ -24,6 +24,7 @@ dev = [
     "pyiceberg-core==0.10.1",
     "pyarrow==25.0.1",
     "sqlalchemy==2.0.55",
+    "defusedxml==0.7.1",
     # Test doubles (no internet or real S3 needed)
     "requests-mock",
     "moto[s3]",

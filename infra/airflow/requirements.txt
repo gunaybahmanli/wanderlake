@@ -5,4 +5,6 @@ pyiceberg[sql-postgres,pyarrow,pyiceberg-core]==0.12.0
 # Needed by PyIceberg to write partitioned tables (month() etc.). Not in the Airflow constraints
 # file, so it is pinned here; PyIceberg 0.12.0 requires >=0.10.1,<0.11.0.
 pyiceberg-core==0.10.1
+# Hardened XML parsing for XML sources (CBAR). Pinned in the Airflow constraints file too.
+defusedxml==0.7.1
 astronomer-cosmos==1.16.0

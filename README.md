@@ -197,6 +197,7 @@ The Airflow container mounts `config/` read-only at `/opt/wanderlake/config`, so
 | DAG | Schedule (UTC) | Source | Output (bronze) |
 |---|---|---|---|
 | `frankfurter_rates` | daily 16:30 | [Frankfurter API](https://frankfurter.dev), ECB reference rates, base EUR | raw `s3://raw/frankfurter/rates/date=YYYY-MM-DD/rates.json`, then bronze `iceberg.bronze.frankfurter_rates` |
+| `cbar_rates` | daily 16:30 | [CBAR](https://www.cbar.az) official rates, AZN per foreign unit | raw `s3://raw/cbar/rates/date=YYYY-MM-DD/rates.xml`, then bronze `iceberg.bronze.cbar_rates` |
 
 ### `frankfurter_rates`
 
@@ -224,6 +225,18 @@ Fetches the European Central Bank reference rates from `https://api.frankfurter.
 Bronze keeps the data as received: weekend and holiday runs repeat the last business day's rates under their own `requested_date` (with that day as `rate_date`). Deduplicating by `rate_date` is the silver layer's job.
 
 PyIceberg (in Airflow) and Trino share one Iceberg catalog. Its name, `ICEBERG_CATALOG_NAME` in `.env`, is read by both; if they differed, each would see different tables.
+
+### `cbar_rates`
+
+Fetches the Central Bank of Azerbaijan's official rates from `https://www.cbar.az/currencies/DD.MM.YYYY.xml` (one XML file per date) and follows the same pattern as Frankfurter: `ingest` stores the file unchanged in `raw` with the same S3 metadata, then `load_bronze` replaces that date's rows in `iceberg.bronze.cbar_rates`. Both rate sources run at 16:30 UTC.
+
+- **Rates are AZN for `nominal` units:** most currencies are quoted per 1 unit, some per 100 (e.g. JPY, KRW, KZT), so 1 unit costs `rate_azn / nominal`.
+- **Only foreign currencies:** the bank metals (XAU, XAG, XPT, XPD, quoted per troy ounce) and SDR (the IMF's unit of account, not a currency) are skipped and logged.
+- **Weekends and holidays** return the last published file; bronze keeps those rows under their own `requested_date`, like Frankfurter.
+- **Future dates are refused:** CBAR answers them with today's file instead of an error.
+- `currency_name` is kept as published (Azerbaijani, e.g. `100 Yapon yeni`). The XML is parsed with `defusedxml` (no entity expansion, no external entities).
+
+Columns: `requested_date`, `rate_date`, `currency_code`, `currency_name`, `nominal` (int), `rate_azn` (`decimal(18, 6)`), plus the same four ingestion columns as Frankfurter.
 
 Run and inspect it:
 
