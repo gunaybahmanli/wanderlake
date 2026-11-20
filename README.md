@@ -190,8 +190,23 @@ dbt (`dbt-core` + `dbt-trino`, from the Airflow image's `/opt/dbt-venv`) builds 
 |---|---|---|
 | bronze | data as received (loaded by the Airflow DAGs); declared as dbt sources with freshness checks | Iceberg tables |
 | silver (`stg_*`) | staging: rename, cast, deduplicate weekend/holiday repeats | views |
-| silver | cleaned, conformed tables, e.g. `silver.exchange_rates` (EUR base, ECB primary, CBAR for missing currencies: [ADR-0008](docs/adr/0008-unified-exchange-rates.md)) | tables with enforced contracts |
+| silver | cleaned, conformed tables (below) | tables with enforced contracts |
 | gold | modelled for the API, website and dashboards (coming) | tables |
+
+Silver tables (all with enforced contracts, keys tested for uniqueness, descriptions on every column; browse them with `make dbt-docs`):
+
+| Table | One row per | Built from |
+|---|---|---|
+| `silver.exchange_rates` | `rate_date`, `currency_code` | ECB rates, CBAR for currencies ECB does not publish; EUR base ([ADR-0008](docs/adr/0008-unified-exchange-rates.md)) |
+| `silver.countries` | country (`cca2`) | latest REST Countries snapshot; currencies and languages flattened from JSON (primary currency = first listed) |
+| `silver.cities` | configured city | `config/cities.yaml` joined to the latest GeoNames snapshot; `elevation_m` falls back to GeoNames' terrain model (`elevation_source`) |
+| `silver.weather_daily` | `city_id`, `weather_date` | Open-Meteo history, with WMO descriptions from the seed `wmo_weather_codes` |
+| `silver.weather_forecast` | `run_date`, `city_id`, `forecast_date` | Open-Meteo forecasts; `is_latest_run` marks the newest run |
+| `silver.travel_advice` | country and published version | FCDO advice change history (`valid_from`, `valid_to`, `is_current`), alerts, and plain-text sections |
+
+**Travel advice text:** the HTML sections are converted to plain text in SQL (`dbt/macros/html_to_text.sql`): tags removed, common and numeric entities decoded, non-breaking spaces and whitespace normalised. Tables and lists lose their structure and link targets are dropped; a test checks that no tags or entities remain. `summary_text` is the FCDO section `warnings-and-insurance` (the pages have no section called summary); every section is in `full_text`, which phase 2 AI uses.
+
+**Tests** cover unique keys, relationships (cities -> countries, weather -> cities, travel advice -> countries, weather codes -> seed), value ranges (temperatures -60 to 60 C, precipitation >= 0), and completeness (every city has weather history, exactly 7 forecast days in the latest run, one current travel advice row per city country).
 
 dbt runs in a one-off container from our Airflow image and needs Trino, not Airflow:
 

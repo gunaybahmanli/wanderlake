@@ -46,3 +46,225 @@ models:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns: [rate_date, currency_code]
+
+  - name: countries
+    description: >
+      One row per country (ISO 3166-1 alpha-2) from the latest weekly REST Countries snapshot,
+      with the JSON lists flattened into arrays. The primary currency is the first one REST
+      Countries lists (null for the few countries without a currency).
+    config:
+      contract: {enforced: true}
+    columns:
+      - {name: cca2, data_type: varchar, description: ISO 3166-1 alpha-2 code., constraints: [{type: not_null}], data_tests: [unique, not_null]}
+      - {name: cca3, data_type: varchar, description: ISO 3166-1 alpha-3 code.}
+      - {name: name_common, data_type: varchar, description: Common English name (e.g. "United States").}
+      - {name: name_official, data_type: varchar, description: Official English name.}
+      - {name: capital, data_type: varchar, description: Primary capital (else the first); null if none.}
+      - {name: region, data_type: varchar, description: Region (e.g. Europe).}
+      - {name: subregion, data_type: varchar, description: Subregion (e.g. Western Asia).}
+      - {name: population, data_type: bigint, description: Population.}
+      - {name: area_km2, data_type: double, description: Area in square kilometres.}
+      - {name: lat, data_type: double, description: Country latitude (central point).}
+      - {name: lon, data_type: double, description: Country longitude (central point).}
+      - {name: flag_png_url, data_type: varchar, description: URL of a PNG flag image.}
+      - {name: independent, data_type: boolean, description: Sovereign state (REST Countries v5 "sovereign").}
+      - {name: un_member, data_type: boolean, description: United Nations member state.}
+      - {name: primary_currency_code, data_type: varchar, description: ISO 4217 code of the first listed currency.}
+      - {name: primary_currency_name, data_type: varchar, description: Name of the first listed currency.}
+      - {name: primary_currency_symbol, data_type: varchar, description: Symbol of the first listed currency.}
+      - {name: currency_codes, data_type: array(varchar), description: All currency codes in REST Countries' order.}
+      - {name: language_names, data_type: array(varchar), description: English names of the official languages.}
+      - {name: snapshot_date, data_type: date, description: REST Countries snapshot the row comes from.}
+      - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built by dbt.}
+
+  - name: cities
+    description: >
+      One row per configured city: config/cities.yaml (via bronze.config_cities; coordinates
+      are ours) joined to the latest GeoNames snapshot on geonames_id.
+    config:
+      contract: {enforced: true}
+    columns:
+      - {name: city_id, data_type: varchar, description: City slug (config/cities.yaml)., constraints: [{type: not_null}], data_tests: [unique, not_null]}
+      - {name: name, data_type: varchar, description: English city name.}
+      - name: country_code
+        data_type: varchar
+        description: ISO 3166-1 alpha-2 code of the city's country.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('countries'), field: cca2}
+      - {name: timezone, data_type: varchar, description: IANA time zone.}
+      - {name: latitude, data_type: double, description: City centre latitude (from our config).}
+      - {name: longitude, data_type: double, description: City centre longitude (from our config).}
+      - {name: currency, data_type: varchar, description: ISO 4217 code of the city's currency.}
+      - {name: rate_source, data_type: varchar, description: Central bank publishing the currency (ecb or cbar).}
+      - {name: inside_airbnb, data_type: boolean, description: City is on Inside Airbnb "Get the Data".}
+      - {name: geonames_id, data_type: bigint, description: GeoNames id of the city., data_tests: [unique, not_null]}
+      - {name: geonames_population, data_type: bigint, description: Population according to GeoNames., data_tests: [not_null]}
+      - {name: elevation_m, data_type: integer, description: 'Elevation in metres: GeoNames elevation, falling back to its terrain model (dem) when empty.'}
+      - name: elevation_source
+        data_type: varchar
+        description: Where elevation_m comes from, 'elevation' (GeoNames field) or 'dem' (terrain model).
+        data_tests:
+          - accepted_values:
+              arguments: {values: ["elevation", "dem"]}
+      - {name: admin1_code, data_type: varchar, description: GeoNames first-level administrative code.}
+      - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built by dbt.}
+
+  - name: weather_daily
+    description: >
+      Observed daily weather per configured city (Open-Meteo archive, ERA5 based; the newest
+      days are provisional), one row per (city_id, weather_date), local dates, metric units.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [city_id, weather_date]}
+    columns:
+      - name: city_id
+        data_type: varchar
+        description: City slug.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('cities'), field: city_id}
+      - {name: weather_date, data_type: date, description: Local date in the city's time zone., data_tests: [not_null]}
+      - name: weather_code
+        data_type: integer
+        description: WMO weather code.
+        data_tests:
+          - relationships:
+              arguments: {to: ref('wmo_weather_codes'), field: weather_code}
+      - {name: weather_description, data_type: varchar, description: Description of the WMO code (seed wmo_weather_codes).}
+      - name: temperature_2m_max
+        data_type: double
+        description: Maximum air temperature at 2 m, degrees C.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: -60, max_value: 60}}}]
+      - name: temperature_2m_min
+        data_type: double
+        description: Minimum air temperature at 2 m, degrees C.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: -60, max_value: 60}}}]
+      - name: temperature_2m_mean
+        data_type: double
+        description: Mean air temperature at 2 m, degrees C.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: -60, max_value: 60}}}]
+      - name: precipitation_sum
+        data_type: double
+        description: Total precipitation, mm.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: 0}}}]
+      - name: rain_sum
+        data_type: double
+        description: Rain, mm.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: 0}}}]
+      - name: snowfall_sum
+        data_type: double
+        description: Snowfall, cm.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: 0}}}]
+      - name: precipitation_hours
+        data_type: double
+        description: Hours with precipitation.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 24}}}]
+      - {name: wind_speed_10m_max, data_type: double, description: Maximum wind speed at 10 m, km/h.}
+      - {name: sunshine_duration, data_type: double, description: Sunshine duration, seconds.}
+      - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built by dbt.}
+
+  - name: weather_forecast
+    description: >
+      Daily 7-day forecasts per configured city (Open-Meteo), one row per
+      (run_date, city_id, forecast_date). is_latest_run marks the most recent run_date.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [run_date, city_id, forecast_date]}
+    columns:
+      - {name: run_date, data_type: date, description: Date of the run that fetched the forecast., data_tests: [not_null]}
+      - name: city_id
+        data_type: varchar
+        description: City slug.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('cities'), field: city_id}
+      - {name: forecast_date, data_type: date, description: Local date the forecast is for., data_tests: [not_null]}
+      - name: weather_code
+        data_type: integer
+        description: WMO weather code.
+        data_tests:
+          - relationships:
+              arguments: {to: ref('wmo_weather_codes'), field: weather_code}
+      - {name: weather_description, data_type: varchar, description: Description of the WMO code (seed wmo_weather_codes).}
+      - name: temperature_2m_max
+        data_type: double
+        description: Forecast maximum temperature at 2 m, degrees C.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: -60, max_value: 60}}}]
+      - name: temperature_2m_min
+        data_type: double
+        description: Forecast minimum temperature at 2 m, degrees C.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: -60, max_value: 60}}}]
+      - name: temperature_2m_mean
+        data_type: double
+        description: Forecast mean temperature at 2 m, degrees C.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: -60, max_value: 60}}}]
+      - name: precipitation_sum
+        data_type: double
+        description: Forecast precipitation, mm.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: 0}}}]
+      - name: rain_sum
+        data_type: double
+        description: Forecast rain, mm.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: 0}}}]
+      - name: snowfall_sum
+        data_type: double
+        description: Forecast snowfall, cm.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: 0}}}]
+      - name: precipitation_hours
+        data_type: double
+        description: Forecast hours with precipitation.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 24}}}]
+      - {name: wind_speed_10m_max, data_type: double, description: Forecast maximum wind speed at 10 m, km/h.}
+      - {name: sunshine_duration, data_type: double, description: Forecast sunshine duration, seconds.}
+      - {name: uv_index_max, data_type: double, description: Forecast maximum UV index.}
+      - name: precipitation_probability_max
+        data_type: double
+        description: Forecast maximum precipitation probability, percent.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - {name: is_latest_run, data_type: boolean, description: True for rows of the most recent run_date., data_tests: [not_null]}
+      - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built by dbt.}
+
+  - name: travel_advice
+    description: >
+      UK FCDO travel advice change history: one row per country and published version
+      (distinct public_updated_at), with the content of the latest snapshot that showed it.
+      Section texts are plain text cleaned from HTML in SQL (macros/html_to_text.sql): tags
+      removed, common entities decoded, whitespace normalised; tables and lists lose their
+      structure and link targets are dropped. Phase 2 AI uses full_text.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [country_code, public_updated_at]}
+    columns:
+      - name: country_code
+        data_type: varchar
+        description: ISO 3166-1 alpha-2 code.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('countries'), field: cca2}
+      - {name: slug, data_type: varchar, description: FCDO page slug (e.g. usa).}
+      - {name: title, data_type: varchar, description: Page title (e.g. "Thailand travel advice").}
+      - {name: public_updated_at, data_type: timestamp(6) with time zone, description: When FCDO published this version (UTC)., data_tests: [not_null]}
+      - {name: change_description, data_type: varchar, description: FCDO's summary of what changed in this version.}
+      - {name: alert_statuses, data_type: array(varchar), description: 'FCDO alert statuses, e.g. avoid_all_but_essential_travel_to_parts (empty if none).'}
+      - {name: has_alert, data_type: boolean, description: True if there is at least one alert status., data_tests: [not_null]}
+      - {name: summary_text, data_type: varchar, description: "Plain text of the section with slug 'warnings-and-insurance' (FCDO pages have no section called summary; this one carries the headline advice)."}
+      - {name: safety_and_security_text, data_type: varchar, description: "Plain text of the section with slug 'safety-and-security'."}
+      - {name: entry_requirements_text, data_type: varchar, description: "Plain text of the section with slug 'entry-requirements'."}
+      - {name: health_text, data_type: varchar, description: "Plain text of the section with slug 'health'."}
+      - {name: full_text, data_type: varchar, description: 'All sections in page order, each as "title, newline, text".'}
+      - {name: valid_from, data_type: timestamp(6) with time zone, description: Start of validity (= public_updated_at)., data_tests: [not_null]}
+      - {name: valid_to, data_type: timestamp(6) with time zone, description: Start of the next version; null for the current version.}
+      - {name: is_current, data_type: boolean, description: True for the latest version of each country., data_tests: [not_null]}
+      - {name: last_seen_snapshot_date, data_type: date, description: Latest daily snapshot that contained this version.}
+      - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built by dbt.}

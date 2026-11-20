@@ -52,3 +52,38 @@ models:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns: [rate_date, currency_code]
+
+  - name: stg_rest_countries
+    description: REST Countries, the latest weekly snapshot only; one row per country. A view.
+    columns:
+      - name: cca2
+        description: ISO 3166-1 alpha-2 code.
+        data_tests: [unique, not_null]
+
+  - name: stg_geonames_cities
+    description: GeoNames cities15000, the latest monthly snapshot only; one row per place. A view.
+    columns:
+      - name: geonameid
+        description: GeoNames id of the place.
+        data_tests: [unique, not_null]
+
+  - name: stg_open_meteo_history
+    description: Open-Meteo history, one row per (city_id, weather_date), latest load kept. A view.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [city_id, weather_date]
+
+  - name: stg_open_meteo_forecast
+    description: Open-Meteo forecasts, one row per (run_date, city_id, forecast_date). A view.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [run_date, city_id, forecast_date]
+
+  - name: stg_fcdo_advice
+    description: FCDO travel advice, every daily snapshot; one row per (snapshot_date, country_code). A view.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [snapshot_date, country_code]
