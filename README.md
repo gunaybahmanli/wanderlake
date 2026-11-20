@@ -182,6 +182,37 @@ SELECT * FROM iceberg.bronze."<table>$snapshots";   -- Iceberg table history
 ```
 
 
+## Transformations (dbt)
+
+dbt (`dbt-core` + `dbt-trino`, from the Airflow image's `/opt/dbt-venv`) builds the silver and gold layers on Trino and Iceberg. The project is in [`dbt/`](dbt/).
+
+| Layer | What | Materialization |
+|---|---|---|
+| bronze | data as received (loaded by the Airflow DAGs); declared as dbt sources with freshness checks | Iceberg tables |
+| silver (`stg_*`) | staging: rename, cast, deduplicate weekend/holiday repeats | views |
+| silver | cleaned, conformed tables, e.g. `silver.exchange_rates` (EUR base, ECB primary, CBAR for missing currencies: [ADR-0008](docs/adr/0008-unified-exchange-rates.md)) | tables with enforced contracts |
+| gold | modelled for the API, website and dashboards (coming) | tables |
+
+dbt runs in a one-off container from our Airflow image and needs Trino, not Airflow:
+
+```bash
+make mode-query              # postgres + seaweedfs + trino
+make config-load             # copy config/cities.yaml to bronze.config_cities (also a daily DAG)
+make dbt-deps                # install dbt packages (dbt_utils)
+make dbt-build               # build all models and run all tests
+make dbt-test                # tests only
+make dbt-source-freshness    # are the bronze sources up to date?
+make dbt-docs                # generate the docs and serve them on http://localhost:8082
+make mode-ingest             # back to Airflow
+```
+
+- Models land in exactly the schema they declare (`silver`, `gold`); `profiles.yml` takes every connection value from environment variables.
+- `bronze.config_cities` is a full copy of `config/cities.yaml` for SQL (the `config_cities` DAG and `make config-load` refresh it); the YAML stays the single source of truth.
+- SQL is linted by sqlfluff with the jinja templater and dbt builtins; the "dbt parse" CI job checks the project without a database.
+- On Linux/WSL, `AIRFLOW_UID` in `.env` must be your user id (`id -u`), so the containers can write `dbt/target` and `dbt/logs`.
+
+## Cities
+
 [`config/cities.yaml`](config/cities.yaml) is the single source of truth for the cities Wanderlake covers. Every city-aware connector reads it through `ingestion.config.load_cities()`, which validates it (unique slug ids, ISO country and currency codes, coordinate ranges, IANA time zone, `rate_source`).
 
 To add a city:
@@ -203,6 +234,7 @@ The Airflow container mounts `config/` read-only at `/opt/wanderlake/config`, so
 | `geonames_cities` | monthly, 1st 04:00 | [GeoNames](https://www.geonames.org) dump `cities15000.zip` (CC BY 4.0) | raw `s3://raw/geonames/cities15000/snapshot_date=YYYY-MM-DD/cities15000.zip`, then bronze `iceberg.bronze.geonames_cities` |
 | `open_meteo` | daily 05:00 | [Open-Meteo](https://open-meteo.com) forecast (7 days) and archive (last 7 days); CC BY 4.0 | raw `s3://raw/open_meteo/{forecast,history}/...`, then bronze `iceberg.bronze.open_meteo_forecast` and `iceberg.bronze.open_meteo_history` |
 | `fcdo_advice` | daily 06:00 | [GOV.UK](https://www.gov.uk/foreign-travel-advice) FCDO foreign travel advice (OGL v3.0) | raw `s3://raw/fcdo/advice/snapshot_date=YYYY-MM-DD/<country_code>.json`, then bronze `iceberg.bronze.fcdo_advice` |
+| `config_cities` | daily 00:30, and on demand | `config/cities.yaml` (this repo) | `iceberg.bronze.config_cities` (full replace; no raw copy, the file is in git) |
 
 ### `frankfurter_rates`
 
@@ -353,7 +385,7 @@ CI (GitHub Actions) runs the same checks on every pull request and push to `main
 | `streaming` | Kafka and Debezium configuration and consumers |
 | `spark/jobs` | Spark jobs writing Iceberg tables |
 | `config` | Shared configuration (`cities.yaml`) |
-| `dbt` | dbt project for silver and gold models |
+| `dbt` | dbt project for silver and gold models (see Transformations) |
 | `legacy` | Simulated legacy/operational source systems |
 | `ai` | RAG pipeline, embeddings and MCP server |
 | `api` | FastAPI backend |

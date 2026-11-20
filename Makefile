@@ -2,7 +2,8 @@
 .PHONY: help setup lint format test clean up down ps logs psql s3-ls backfill test-dags \
 	tofu-init tofu-fmt tofu-validate tofu-plan tofu-apply \
 	web-install web-dev web-lint web-build \
-	trino lakehouse-init lakehouse-smoke-test build mode-query mode-ingest weather-backfill
+	trino lakehouse-init lakehouse-smoke-test build mode-query mode-ingest weather-backfill \
+	config-load dbt-deps dbt-build dbt-test dbt-source-freshness dbt-docs
 
 PROFILE ?= core
 SERVICE ?=
@@ -13,6 +14,13 @@ END ?=
 REPROCESS ?= none
 MAX_ACTIVE_RUNS ?= 1
 WEATHER_START ?= 2023-01-01
+
+# dbt runs in a one-off container from our Airflow image (dbt in /opt/dbt-venv), project mounted.
+# It needs Trino (make mode-query), not the Airflow service.
+DBT_RUN = $(COMPOSE_ALL) run --rm --no-deps --entrypoint /opt/dbt-venv/bin/dbt
+DBT_DOCS_PORT ?= 8082
+REQUIRE_TRINO = @docker inspect -f '{{.State.Health.Status}}' wanderlake-trino-1 2>/dev/null | grep -q healthy \
+	|| { echo "Trino is not running: run 'make mode-query' first."; exit 1; }
 
 # OpenTofu: load the root .env (credentials + TF_VAR_*) into the environment, then run in infra/tofu.
 TOFU_DIR := infra/tofu
@@ -138,3 +146,28 @@ lakehouse-smoke-test: ## Create, write, read and drop a temporary Iceberg table;
 
 weather-backfill: ## One-time Open-Meteo history backfill, month by month (WEATHER_START=2023-01-01)
 	@$(COMPOSE_ALL) exec -T airflow python -m ingestion.sources.open_meteo backfill --start "$(WEATHER_START)"
+
+config-load: ## Copy config/cities.yaml into iceberg.bronze.config_cities (full replace)
+	@$(COMPOSE_ALL) run --rm --no-deps --entrypoint python airflow -m ingestion.sources.config_cities
+
+dbt-deps: ## dbt: install packages (dbt_utils)
+	@$(DBT_RUN) airflow deps
+
+dbt-build: ## dbt: build all models and run all tests (needs make mode-query)
+	$(REQUIRE_TRINO)
+	@$(DBT_RUN) airflow build
+
+dbt-test: ## dbt: run tests only (needs make mode-query)
+	$(REQUIRE_TRINO)
+	@$(DBT_RUN) airflow test
+
+dbt-source-freshness: ## dbt: check source freshness (needs make mode-query)
+	$(REQUIRE_TRINO)
+	@$(DBT_RUN) airflow source freshness
+
+dbt-docs: ## dbt: generate docs and serve them on http://localhost:8082 (needs make mode-query)
+	$(REQUIRE_TRINO)
+	@$(DBT_RUN) airflow docs generate
+	@echo "dbt docs on http://localhost:$(DBT_DOCS_PORT) (Ctrl+C to stop)"
+	@$(COMPOSE_ALL) run --rm --no-deps -p $(DBT_DOCS_PORT):$(DBT_DOCS_PORT) --entrypoint /opt/dbt-venv/bin/dbt airflow \
+		docs serve --host 0.0.0.0 --port $(DBT_DOCS_PORT) --no-browser

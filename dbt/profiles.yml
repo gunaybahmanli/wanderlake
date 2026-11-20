@@ -1,0 +1,15 @@
+# Connection settings come from environment variables only (no secrets: local Trino has no auth).
+# The defaults let `dbt parse` run without a database (CI).
+wanderlake:
+  target: local
+  outputs:
+    local:
+      type: trino
+      method: none
+      host: "{{ env_var('DBT_TRINO_HOST', 'localhost') }}"
+      port: "{{ env_var('DBT_TRINO_PORT', '8081') | int }}"
+      user: "{{ env_var('DBT_TRINO_USER', 'dbt') }}"
+      catalog: iceberg
+      schema: silver
+      threads: 2
+      http_scheme: http

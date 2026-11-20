@@ -1,0 +1,54 @@
+version: 2
+
+models:
+  - name: stg_frankfurter_rates
+    description: >
+      ECB euro reference rates (Frankfurter) with one row per actual rate_date and currency:
+      weekend and holiday repeats from bronze are collapsed, keeping the latest load. A view.
+    columns:
+      - name: rate_date
+        description: Business day the rates are for.
+        data_tests: [not_null]
+      - name: currency_code
+        description: ISO 4217 code of the quoted currency.
+        data_tests: [not_null]
+      - name: units_per_eur
+        description: Units of the currency per 1 EUR.
+        data_tests: [not_null]
+      - name: requested_date
+        description: Run date of the bronze row that was kept.
+      - name: _loaded_at
+        description: When the kept bronze row was loaded.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [rate_date, currency_code]
+
+  - name: stg_cbar_rates
+    description: >
+      CBAR official rates (AZN per foreign unit) with one row per actual rate_date and
+      currency; weekend and holiday repeats collapsed, keeping the latest load. A view.
+    columns:
+      - name: rate_date
+        description: Date stated in the CBAR file.
+        data_tests: [not_null]
+      - name: currency_code
+        description: ISO 4217 code of the foreign currency.
+        data_tests: [not_null]
+      - name: currency_name
+        description: Name as published (Azerbaijani).
+      - name: nominal
+        description: Number of units the rate is quoted for (1 or 100).
+      - name: rate_azn
+        description: AZN for `nominal` units, as published.
+      - name: azn_per_unit
+        description: AZN for 1 unit of the currency (rate_azn / nominal).
+        data_tests: [not_null]
+      - name: requested_date
+        description: Run date of the bronze row that was kept.
+      - name: _loaded_at
+        description: When the kept bronze row was loaded.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [rate_date, currency_code]
