@@ -1,0 +1,73 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: >
+      Bronze layer: data as received from each source, loaded by the Airflow DAGs in airflow/dags
+      (one Iceberg table per source). Weekend and holiday rows repeat the last business day.
+    database: iceberg
+    schema: bronze
+    loaded_at_field: _loaded_at
+    freshness:
+      warn_after: {count: 2, period: day}
+      error_after: {count: 4, period: day}
+    tables:
+      - name: frankfurter_rates
+        description: >
+          ECB euro reference rates from the Frankfurter API, one row per quote currency and
+          requested date (DAG frankfurter_rates). rate = units of quote currency per 1 EUR.
+        columns:
+          - name: requested_date
+            description: Date the API was asked for (the DAG run date).
+          - name: rate_date
+            description: Business day the rates are for (earlier than requested_date on weekends and holidays).
+          - name: base_currency
+            description: Always EUR.
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: ["EUR"]
+          - name: quote_currency
+            description: ISO 4217 code of the quoted currency.
+          - name: rate
+            description: Units of quote_currency per 1 EUR, decimal(18, 8).
+          - name: _loaded_at
+            description: When the bronze row was written.
+
+      - name: cbar_rates
+        description: >
+          Official rates of the Central Bank of Azerbaijan, one row per foreign currency and
+          requested date (DAG cbar_rates). rate_azn = AZN for `nominal` units.
+        columns:
+          - name: requested_date
+            description: Date the file was asked for (the DAG run date).
+          - name: rate_date
+            description: Date stated in the CBAR file (the last business day on weekends and holidays).
+          - name: currency_code
+            description: ISO 4217 code of the foreign currency (metals and SDR are excluded in bronze).
+          - name: currency_name
+            description: Name as published (Azerbaijani).
+          - name: nominal
+            description: Number of units the rate is quoted for (1 or 100).
+          - name: rate_azn
+            description: AZN for `nominal` units of the currency, decimal(18, 6).
+          - name: _loaded_at
+            description: When the bronze row was written.
+
+      - name: config_cities
+        description: >
+          Copy of config/cities.yaml, the single source of truth for our cities (DAG config_cities,
+          make config-load). Fully replaced on every load.
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 4, period: day}
+        columns:
+          - name: city_id
+            description: City slug, unique.
+            data_tests: [unique, not_null]
+          - name: country_code
+            description: ISO 3166-1 alpha-2 code.
+          - name: currency
+            description: ISO 4217 code of the city's currency.
+          - name: rate_source
+            description: ecb or cbar (which central bank publishes the currency).

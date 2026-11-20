@@ -1,6 +1,9 @@
 [sqlfluff]
 dialect = trino
-# Switch to the dbt templater once the dbt project exists.
+# Jinja templater with dbt builtins (ref, source, config, var stubs), not the dbt templater:
+# the dbt templater would need dbt-core + dbt-trino inside pre-commit's environment and
+# `dbt deps` before every lint (network and state in the Lint CI job). dbt models use plain SQL
+# plus ref/source only (dbt_utils only in YAML tests), and the "dbt parse" CI job checks them.
 templater = jinja
 max_line_length = 100
 
@@ -18,3 +21,7 @@ capitalisation_policy = lower
 
 [sqlfluff:rules:capitalisation.types]
 extended_capitalisation_policy = lower
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = True
+library_path = dbt/macros

@@ -202,6 +202,12 @@ services:
       ICEBERG_CATALOG_DB_PASSWORD: ${ICEBERG_CATALOG_DB_PASSWORD:?set ICEBERG_CATALOG_DB_PASSWORD in .env}
       # Source API keys (only for the DAGs that need them)
       REST_COUNTRIES_API_KEY: ${REST_COUNTRIES_API_KEY:?set REST_COUNTRIES_API_KEY in .env}
+      # dbt (dbt/profiles.yml reads these); dbt runs from /opt/dbt-venv
+      DBT_PROFILES_DIR: /opt/wanderlake/dbt
+      DBT_PROJECT_DIR: /opt/wanderlake/dbt
+      DBT_TRINO_HOST: trino
+      DBT_TRINO_PORT: "8080"
+      DBT_TRINO_USER: dbt
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
       AIRFLOW__CORE__PARALLELISM: "1" # one task at a time: two tasks would need ~1.9 GiB
@@ -228,6 +234,7 @@ services:
       - ../../airflow/dags:/opt/airflow/dags
       - ../../ingestion/src:/opt/wanderlake/ingestion/src:ro
       - ../../config:/opt/wanderlake/config:ro # cities.yaml, read by ingestion.config
+      - ../../dbt:/opt/wanderlake/dbt # read-write: dbt writes target/, logs/, dbt_packages/
       - ../../tests:/opt/wanderlake/tests:ro # for make test-dags
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/v2/monitor/health"]

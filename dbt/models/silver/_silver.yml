@@ -1,0 +1,48 @@
+version: 2
+
+models:
+  - name: exchange_rates
+    description: >
+      Unified daily exchange rates with EUR as base (ADR-0008). ECB is the source for every
+      currency it publishes (EUR = 1 on every ECB date); CBAR fills only currencies ECB never
+      publishes (e.g. AZN, AED), as cross rates through AZN from the same CBAR rate_date.
+      Convert an amount from currency A to B on a date: amount * units_per_eur(B) / units_per_eur(A).
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: rate_date
+        description: Business day the rate is for (ECB and CBAR publish on different days).
+        data_type: date
+        constraints:
+          - type: not_null
+        data_tests: [not_null]
+      - name: currency_code
+        description: ISO 4217 currency code.
+        data_type: varchar
+        constraints:
+          - type: not_null
+        data_tests: [not_null]
+      - name: units_per_eur
+        description: Units of the currency per 1 EUR, decimal(24, 10).
+        data_type: decimal(24, 10)
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "> 0"
+      - name: source
+        description: ecb (Frankfurter) or cbar (Central Bank of Azerbaijan cross rate).
+        data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["ecb", "cbar"]
+      - name: _built_at
+        description: When this table was built by dbt.
+        data_type: timestamp(6) with time zone
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [rate_date, currency_code]

@@ -12,6 +12,7 @@ and the consequences.
 | [0005](0005-use-opentofu.md) | Use OpenTofu for infrastructure as code | Accepted | 2026-11-18 |
 | [0006](0006-accept-unsigned-opentofu-providers.md) | Accept unsigned OpenTofu providers (Supabase, Vercel) | Accepted | 2026-11-18 |
 | [0007](0007-custom-airflow-image.md) | Custom Airflow image with dbt in a separate virtualenv | Accepted | 2026-11-19 |
+| [0008](0008-unified-exchange-rates.md) | Unified exchange rates: ECB primary, CBAR for missing currencies, EUR base | Accepted | 2026-11-20 |
 
 ## Adding an ADR
 

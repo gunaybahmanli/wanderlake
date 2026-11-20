@@ -1,0 +1,25 @@
+# Wanderlake dbt project: silver and gold models on Trino + Iceberg (see README "Transformations").
+name: wanderlake
+version: "0.1.0"
+config-version: 2
+profile: wanderlake
+require-dbt-version: [">=1.12.0", "<2.0.0"]
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  wanderlake:
+    staging:
+      # Iceberg views work with our Trino JDBC catalog (checked), so staging is cheap views.
+      +schema: silver
+      +materialized: view
+    silver:
+      +schema: silver
+      +materialized: table
+
+flags:
+  # Validate TLS certificates whenever HTTPS is used (local Trino is plain HTTP inside Docker).
+  require_certificate_validation: true
