@@ -71,3 +71,79 @@ sources:
             description: ISO 4217 code of the city's currency.
           - name: rate_source
             description: ecb or cbar (which central bank publishes the currency).
+
+      - name: rest_countries
+        description: >
+          Weekly REST Countries v5 snapshots, one row per country (ISO 3166 code) and
+          snapshot_date (DAG rest_countries). Nested values are JSON strings as received.
+        freshness:
+          warn_after: {count: 9, period: day}
+          error_after: {count: 16, period: day}
+        columns:
+          - name: snapshot_date
+            description: Date of the weekly snapshot.
+          - name: cca2
+            description: ISO 3166-1 alpha-2 code.
+          - name: currencies_json
+            description: 'JSON list of {code, name, symbol}, in the order REST Countries lists them.'
+          - name: languages_json
+            description: 'JSON list of language objects ({name, native_name, iso639_*, bcp47}).'
+          - name: _loaded_at
+            description: When the bronze row was written.
+
+      - name: geonames_cities
+        description: >
+          Monthly GeoNames cities15000 snapshots (population > 15,000 or capitals), one row per
+          place and snapshot_date (DAG geonames_cities). CC BY 4.0, GeoNames.
+        freshness:
+          warn_after: {count: 35, period: day}
+          error_after: {count: 62, period: day}
+        columns:
+          - name: geonameid
+            description: GeoNames id of the place.
+          - name: elevation
+            description: Elevation in metres as recorded by GeoNames (often empty).
+          - name: dem
+            description: Digital elevation model value in metres (SRTM3 or GTOPO30); always filled.
+          - name: _loaded_at
+            description: When the bronze row was written.
+
+      - name: open_meteo_history
+        description: >
+          Daily weather history per configured city from the Open-Meteo archive (DAG open_meteo
+          and the one-time backfill). Recent days are provisional and get reloaded.
+        columns:
+          - name: city_id
+            description: City slug from config/cities.yaml.
+          - name: weather_date
+            description: Local date in the city's time zone.
+          - name: _loaded_at
+            description: When the bronze row was written.
+
+      - name: open_meteo_forecast
+        description: >
+          Daily 7-day forecasts per configured city from the Open-Meteo forecast API, one batch
+          per run_date (DAG open_meteo).
+        columns:
+          - name: run_date
+            description: Date of the DAG run that fetched the forecast.
+          - name: forecast_date
+            description: Local date the forecast is for.
+          - name: _loaded_at
+            description: When the bronze row was written.
+
+      - name: fcdo_advice
+        description: >
+          Daily snapshots of UK FCDO foreign travel advice (GOV.UK Content API) for the countries
+          of our cities (DAG fcdo_advice). HTML unchanged. Open Government Licence v3.0.
+        columns:
+          - name: snapshot_date
+            description: Date of the daily snapshot.
+          - name: public_updated_at
+            description: When FCDO last published a change to the page.
+          - name: alert_status_json
+            description: JSON list of FCDO alert statuses (empty when there is no alert).
+          - name: parts_json
+            description: 'JSON list of sections {slug, title, body} with the HTML body as received.'
+          - name: _loaded_at
+            description: When the bronze row was written.

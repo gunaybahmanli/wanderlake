@@ -1,0 +1,14 @@
+version: 2
+
+seeds:
+  - name: wmo_weather_codes
+    description: >
+      WMO weather interpretation codes (WW) as used by Open-Meteo, with the short descriptions
+      from the Open-Meteo documentation (https://open-meteo.com/en/docs). Static reference data.
+    columns:
+      - name: weather_code
+        description: WMO weather code (0-99) as returned by Open-Meteo.
+        data_tests: [unique, not_null]
+      - name: weather_description
+        description: Short English description, e.g. "Slight rain".
+        data_tests: [not_null]

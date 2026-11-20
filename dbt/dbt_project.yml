@@ -23,3 +23,11 @@ models:
 flags:
   # Validate TLS certificates whenever HTTPS is used (local Trino is plain HTTP inside Docker).
   require_certificate_validation: true
+
+seeds:
+  wanderlake:
+    +schema: silver
+    wmo_weather_codes:
+      +column_types:
+        weather_code: integer
+        weather_description: varchar

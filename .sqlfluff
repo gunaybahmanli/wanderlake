@@ -24,4 +24,4 @@ extended_capitalisation_policy = lower
 
 [sqlfluff:templater:jinja]
 apply_dbt_builtins = True
-library_path = dbt/macros
+load_macros_from_path = dbt/macros
