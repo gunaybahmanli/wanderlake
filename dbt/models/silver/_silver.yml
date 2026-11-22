@@ -164,8 +164,8 @@ models:
         data_type: double
         description: Hours with precipitation.
         data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 24}}}]
-      - {name: wind_speed_10m_max, data_type: double, description: Maximum wind speed at 10 m, km/h.}
-      - {name: sunshine_duration, data_type: double, description: Sunshine duration, seconds.}
+      - {name: wind_speed_10m_max, data_type: double, description: "Maximum wind speed at 10 m, km/h."}
+      - {name: sunshine_duration, data_type: double, description: "Sunshine duration, seconds."}
       - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built by dbt.}
 
   - name: weather_forecast
@@ -222,8 +222,8 @@ models:
         data_type: double
         description: Forecast hours with precipitation.
         data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 24}}}]
-      - {name: wind_speed_10m_max, data_type: double, description: Forecast maximum wind speed at 10 m, km/h.}
-      - {name: sunshine_duration, data_type: double, description: Forecast sunshine duration, seconds.}
+      - {name: wind_speed_10m_max, data_type: double, description: "Forecast maximum wind speed at 10 m, km/h."}
+      - {name: sunshine_duration, data_type: double, description: "Forecast sunshine duration, seconds."}
       - {name: uv_index_max, data_type: double, description: Forecast maximum UV index.}
       - name: precipitation_probability_max
         data_type: double
