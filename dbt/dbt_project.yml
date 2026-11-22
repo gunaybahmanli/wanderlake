@@ -19,6 +19,10 @@ models:
     silver:
       +schema: silver
       +materialized: table
+    gold:
+      # Shaped for the website and dashboard: star schema (dims, facts) plus serving tables.
+      +schema: gold
+      +materialized: table
 
 flags:
   # Validate TLS certificates whenever HTTPS is used (local Trino is plain HTTP inside Docker).

@@ -1,0 +1,215 @@
+version: 2
+
+models:
+  - name: dim_country
+    description: "Country dimension: one row per country (all countries) from silver.countries."
+    config:
+      contract: {enforced: true}
+    columns:
+      - {name: cca2, data_type: varchar, description: ISO 3166-1 alpha-2 code (primary key)., constraints: [{type: not_null}], data_tests: [unique, not_null]}
+      - {name: cca3, data_type: varchar, description: ISO 3166-1 alpha-3 code.}
+      - {name: name_common, data_type: varchar, description: Common English name.}
+      - {name: name_official, data_type: varchar, description: Official English name.}
+      - {name: capital, data_type: varchar, description: Primary capital.}
+      - {name: region, data_type: varchar, description: Region.}
+      - {name: subregion, data_type: varchar, description: Subregion.}
+      - {name: population, data_type: bigint, description: Population.}
+      - {name: area_km2, data_type: double, description: Area in square kilometres.}
+      - {name: lat, data_type: double, description: Country latitude.}
+      - {name: lon, data_type: double, description: Country longitude.}
+      - {name: flag_png_url, data_type: varchar, description: URL of a PNG flag.}
+      - {name: independent, data_type: boolean, description: Sovereign state.}
+      - {name: un_member, data_type: boolean, description: United Nations member.}
+      - {name: primary_currency_code, data_type: varchar, description: First listed currency (ISO 4217).}
+      - {name: primary_currency_name, data_type: varchar, description: Name of the primary currency.}
+      - {name: primary_currency_symbol, data_type: varchar, description: Symbol of the primary currency.}
+      - {name: currency_codes, data_type: array(varchar), description: All currency codes.}
+      - {name: language_names, data_type: array(varchar), description: English names of the official languages.}
+      - {name: has_configured_city, data_type: boolean, description: True if a city in config/cities.yaml is in this country., data_tests: [not_null]}
+      - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built.}
+
+  - name: dim_city
+    description: "City dimension: one row per configured city with its country attributes."
+    config:
+      contract: {enforced: true}
+    columns:
+      - {name: city_id, data_type: varchar, description: City slug (primary key)., constraints: [{type: not_null}], data_tests: [unique, not_null]}
+      - {name: name, data_type: varchar, description: English city name.}
+      - name: country_code
+        data_type: varchar
+        description: ISO 3166-1 alpha-2 code of the country.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('dim_country'), field: cca2}
+      - {name: country_name, data_type: varchar, description: Common English name of the country.}
+      - {name: region, data_type: varchar, description: Region of the country.}
+      - {name: subregion, data_type: varchar, description: Subregion of the country.}
+      - {name: flag_png_url, data_type: varchar, description: URL of the country's PNG flag.}
+      - {name: language_names, data_type: array(varchar), description: Official languages of the country.}
+      - {name: timezone, data_type: varchar, description: IANA time zone of the city.}
+      - {name: latitude, data_type: double, description: City centre latitude.}
+      - {name: longitude, data_type: double, description: City centre longitude.}
+      - {name: currency, data_type: varchar, description: ISO 4217 code of the city's currency.}
+      - {name: primary_currency_name, data_type: varchar, description: Name of the country's primary currency.}
+      - {name: primary_currency_symbol, data_type: varchar, description: Symbol of the country's primary currency.}
+      - {name: rate_source, data_type: varchar, description: Central bank publishing the currency (ecb or cbar).}
+      - {name: inside_airbnb, data_type: boolean, description: City is on Inside Airbnb "Get the Data".}
+      - {name: geonames_id, data_type: bigint, description: GeoNames id.}
+      - {name: geonames_population, data_type: bigint, description: Population according to GeoNames.}
+      - {name: elevation_m, data_type: integer, description: "Elevation in metres (GeoNames elevation, else dem)."}
+      - {name: elevation_source, data_type: varchar, description: elevation or dem.}
+      - {name: admin1_code, data_type: varchar, description: GeoNames first-level administrative code.}
+      - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built.}
+
+  - name: fct_exchange_rate
+    description: >
+      Daily conversion matrix for the currencies of interest (all configured city currencies
+      plus EUR, USD and AZN): one row per calendar date and ordered currency pair, identical
+      pairs excluded. As-of rule: each date uses, per currency, the latest rate on or before it
+      (weekends and holidays reuse the last business day). Convert: amount * rate.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [date, from_currency, to_currency]}
+    columns:
+      - {name: date, data_type: date, description: Calendar date (first rate date to today UTC)., data_tests: [not_null]}
+      - {name: from_currency, data_type: varchar, description: ISO 4217 code converted from., data_tests: [not_null]}
+      - {name: to_currency, data_type: varchar, description: ISO 4217 code converted to., data_tests: [not_null]}
+      - name: rate
+        data_type: decimal(28, 12)
+        description: Units of to_currency per 1 unit of from_currency on that date.
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments: {expression: "> 0"}
+      - {name: from_rate_date, data_type: date, description: Rate date actually used for from_currency (<= date)., data_tests: [not_null]}
+      - {name: to_rate_date, data_type: date, description: Rate date actually used for to_currency (<= date)., data_tests: [not_null]}
+      - {name: source_from, data_type: varchar, description: Source of the from_currency rate (ecb or cbar).}
+      - {name: source_to, data_type: varchar, description: Source of the to_currency rate (ecb or cbar).}
+      - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built.}
+
+  - name: fct_weather_daily
+    description: >
+      Daily observed weather per city, shaped for charts. Incremental model (Iceberg MERGE on
+      city_id + weather_date): the first build loads all history; each later run reprocesses
+      the 7 days before the newest weather_date already loaded, because the Open-Meteo archive
+      revises its newest days. Full rebuild: dbt build --full-refresh -s fct_weather_daily.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [city_id, weather_date]}
+    columns:
+      - name: city_id
+        data_type: varchar
+        description: City slug.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('dim_city'), field: city_id}
+      - {name: weather_date, data_type: date, description: Local date in the city's time zone., data_tests: [not_null]}
+      - {name: year, data_type: integer, description: Calendar year of weather_date.}
+      - {name: month, data_type: integer, description: Calendar month (1-12) of weather_date.}
+      - {name: is_weekend, data_type: boolean, description: Saturday or Sunday.}
+      - {name: temp_max_c, data_type: double, description: "Maximum temperature, C."}
+      - {name: temp_min_c, data_type: double, description: "Minimum temperature, C."}
+      - {name: temp_mean_c, data_type: double, description: "Mean temperature, C."}
+      - {name: temp_range_c, data_type: double, description: temp_max_c - temp_min_c.}
+      - {name: precipitation_mm, data_type: double, description: "Total precipitation, mm."}
+      - {name: is_rainy_day, data_type: boolean, description: Precipitation of at least 1 mm.}
+      - {name: sunshine_hours, data_type: double, description: Sunshine duration in hours.}
+      - {name: wind_max_kmh, data_type: double, description: "Maximum wind speed at 10 m, km/h."}
+      - {name: weather_code, data_type: integer, description: WMO weather code.}
+      - {name: weather_description, data_type: varchar, description: Description of the WMO code.}
+      - {name: _built_at, data_type: timestamp(6) with time zone, description: When the row was last (re)processed.}
+
+  - name: agg_city_climate_monthly
+    description: >
+      Climate per city and calendar month (1-12) over all loaded years. A "pleasant day" has a
+      maximum temperature between 18 and 28 C (inclusive) and less than 1 mm of precipitation.
+      Averages and shares are computed over days, so a partial month counts with the days it has.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [city_id, month]}
+    columns:
+      - name: city_id
+        data_type: varchar
+        description: City slug.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('dim_city'), field: city_id}
+      - name: month
+        data_type: integer
+        description: Calendar month, 1 (January) to 12 (December).
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments: {min_value: 1, max_value: 12}
+      - {name: years_covered, data_type: integer, description: Number of distinct years with data for this month.}
+      - {name: days_covered, data_type: integer, description: Number of days with data for this month.}
+      - {name: avg_temp_max_c, data_type: double, description: "Average daily maximum temperature, C."}
+      - {name: avg_temp_min_c, data_type: double, description: "Average daily minimum temperature, C."}
+      - {name: avg_rainy_days, data_type: double, description: Expected rainy days (>= 1 mm) in the month (rainy-day share x average days in that month).}
+      - {name: avg_sunshine_hours_per_day, data_type: double, description: Average sunshine hours per day.}
+      - name: pleasant_day_share
+        data_type: double
+        description: "Share of days (0-1) that are pleasant: max temperature 18-28 C and precipitation below 1 mm."
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments: {min_value: 0, max_value: 1}
+      - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built.}
+
+  - name: city_overview
+    description: >
+      One row per configured city for the city page: city and country attributes, rates to EUR,
+      USD and AZN as of today (1 when the city's currency is the target), today's forecast in the
+      city's own time zone from the latest forecast run, the current FCDO advice, and the three
+      best months by pleasant_day_share.
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: city_id
+        data_type: varchar
+        description: City slug (primary key).
+        constraints: [{type: not_null}]
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments: {to: ref('dim_city'), field: city_id}
+      - {name: name, data_type: varchar, description: English city name.}
+      - name: country_code
+        data_type: varchar
+        description: ISO 3166-1 alpha-2 code.
+        data_tests:
+          - relationships:
+              arguments: {to: ref('dim_country'), field: cca2}
+      - {name: country_name, data_type: varchar, description: Country name.}
+      - {name: region, data_type: varchar, description: Region of the country.}
+      - {name: flag_png_url, data_type: varchar, description: Country flag URL.}
+      - {name: timezone, data_type: varchar, description: IANA time zone of the city.}
+      - {name: latitude, data_type: double, description: City centre latitude.}
+      - {name: longitude, data_type: double, description: City centre longitude.}
+      - {name: currency, data_type: varchar, description: ISO 4217 code of the city's currency.}
+      - {name: primary_currency_name, data_type: varchar, description: Currency name.}
+      - {name: primary_currency_symbol, data_type: varchar, description: Currency symbol.}
+      - {name: language_names, data_type: array(varchar), description: Official languages.}
+      - {name: geonames_population, data_type: bigint, description: Population (GeoNames).}
+      - {name: elevation_m, data_type: integer, description: Elevation in metres.}
+      - {name: rate_to_eur, data_type: "decimal(28, 12)", description: EUR per 1 unit of the city's currency today., data_tests: [not_null]}
+      - {name: rate_to_usd, data_type: "decimal(28, 12)", description: USD per 1 unit of the city's currency today., data_tests: [not_null]}
+      - {name: rate_to_azn, data_type: "decimal(28, 12)", description: AZN per 1 unit of the city's currency today., data_tests: [not_null]}
+      - {name: forecast_date, data_type: date, description: Today's date in the city's time zone (the forecast day shown).}
+      - {name: today_weather_description, data_type: varchar, description: Today's forecast weather description.}
+      - {name: today_temp_max_c, data_type: double, description: "Today's forecast maximum temperature, C."}
+      - {name: today_temp_min_c, data_type: double, description: "Today's forecast minimum temperature, C."}
+      - {name: today_precipitation_probability, data_type: double, description: "Today's forecast maximum precipitation probability, percent."}
+      - {name: has_travel_alert, data_type: boolean, description: The current FCDO advice has an alert.}
+      - {name: advice_updated_at, data_type: timestamp(6) with time zone, description: When FCDO published the current advice.}
+      - {name: best_months, data_type: array(varchar), description: The 3 month names with the highest pleasant_day_share (ties by month order).}
+      - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built.}

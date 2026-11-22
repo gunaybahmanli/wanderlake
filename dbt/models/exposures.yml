@@ -1,0 +1,33 @@
+version: 2
+
+exposures:
+  - name: website
+    label: Wanderlake website
+    type: application
+    maturity: low
+    url: https://wanderlake.vercel.app
+    description: >
+      The public Next.js website (web/): city pages, currency conversion and the best months
+      to visit. It reads the gold tables listed below.
+    depends_on:
+      - ref('dim_city')
+      - ref('dim_country')
+      - ref('fct_exchange_rate')
+      - ref('city_overview')
+      - ref('agg_city_climate_monthly')
+    owner:
+      name: Wanderlake
+
+  - name: dashboard
+    label: Wanderlake dashboard (planned)
+    type: dashboard
+    maturity: low
+    description: >
+      Planned Evidence.dev / Superset dashboard for exchange rate and weather trends. Not built
+      yet; listed so its dependencies show in the lineage.
+    depends_on:
+      - ref('fct_exchange_rate')
+      - ref('fct_weather_daily')
+      - ref('agg_city_climate_monthly')
+    owner:
+      name: Wanderlake

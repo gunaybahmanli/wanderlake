@@ -191,7 +191,7 @@ dbt (`dbt-core` + `dbt-trino`, from the Airflow image's `/opt/dbt-venv`) builds 
 | bronze | data as received (loaded by the Airflow DAGs); declared as dbt sources with freshness checks | Iceberg tables |
 | silver (`stg_*`) | staging: rename, cast, deduplicate weekend/holiday repeats | views |
 | silver | cleaned, conformed tables (below) | tables with enforced contracts |
-| gold | modelled for the API, website and dashboards (coming) | tables |
+| gold | star schema and serving tables for the website, API and dashboards (below) | tables with enforced contracts; `fct_weather_daily` incremental |
 
 Silver tables (all with enforced contracts, keys tested for uniqueness, descriptions on every column; browse them with `make dbt-docs`):
 
@@ -207,6 +207,38 @@ Silver tables (all with enforced contracts, keys tested for uniqueness, descript
 **Travel advice text:** the HTML sections are converted to plain text in SQL (`dbt/macros/html_to_text.sql`): tags removed, common and numeric entities decoded, non-breaking spaces and whitespace normalised. Tables and lists lose their structure and link targets are dropped; a test checks that no tags or entities remain. `summary_text` is the FCDO section `warnings-and-insurance` (the pages have no section called summary); every section is in `full_text`, which phase 2 AI uses.
 
 **Tests** cover unique keys, relationships (cities -> countries, weather -> cities, travel advice -> countries, weather codes -> seed), value ranges (temperatures -60 to 60 C, precipitation >= 0), and completeness (every city has weather history, exactly 7 forecast days in the latest run, one current travel advice row per city country).
+
+### Gold layer (star schema)
+
+Gold is shaped for its consumers: dimensions describe places, facts hold measurements by date, and serving tables give the website one ready row per page. Every gold model has an enforced contract.
+
+```
+             dim_country
+                  |
+              dim_city ------------------+---------------------+
+                  |                      |                     |
+      fct_weather_daily       agg_city_climate_monthly    city_overview
+      (city, day)             (city, month)               (city; serving)
+
+      fct_exchange_rate (date, from_currency, to_currency): currency-level fact
+```
+
+| Table | Type | One row per | Notes |
+|---|---|---|---|
+| `gold.dim_country` | dimension | country (all 250) | `has_configured_city` marks the countries with a configured city |
+| `gold.dim_city` | dimension | configured city | `silver.cities` plus country fields (name, region, flag, languages, currency name and symbol) |
+| `gold.fct_exchange_rate` | fact | `date`, `from_currency`, `to_currency` | daily conversion matrix (below) |
+| `gold.fct_weather_daily` | fact | `city_id`, `weather_date` | daily weather with derived fields: `is_weekend`, `temp_range_c`, `is_rainy_day` (>= 1 mm), `sunshine_hours` |
+| `gold.agg_city_climate_monthly` | aggregate | `city_id`, `month` | averages over all loaded years, `pleasant_day_share` (below) |
+| `gold.city_overview` | serving | configured city | city fields, rates to EUR, USD and AZN today, today's forecast, current travel advice alert, `best_months` |
+
+- **Conversion matrix and as-of rule:** `fct_exchange_rate` covers the city currencies plus EUR, USD and AZN, every ordered pair of different currencies, for every calendar day from the first rate date to today. Each day uses each currency's latest rate on or before that day (rates are not published on weekends and holidays), so `from_rate_date` and `to_rate_date` can be older than `date`; `source_from` and `source_to` say whether ECB or CBAR supplied each side. `rate` is the number of `to_currency` units per 1 `from_currency`, computed through the EUR base. The day spine is Trino's `sequence()`.
+- **Incremental weather:** `fct_weather_daily` merges on (`city_id`, `weather_date`) and reprocesses the last 7 days on each run (Open-Meteo revises recent days); a `--full-refresh` rebuilds the full history.
+- **Pleasant day:** maximum temperature between 18 and 28 C (inclusive) and less than 1 mm of precipitation. `pleasant_day_share` is the share of such days in that calendar month over all loaded years; `best_months` in `city_overview` are the 3 months with the highest share (ties go to the earlier month).
+- **Today** in `city_overview` is the city's own date (its time zone) for the forecast, from the latest forecast run; rates are today's as-of rates.
+- **Exposures** (`dbt/models/exposures.yml`) declare the consumers: the website (https://wanderlake.vercel.app) and the planned dashboard, so `make dbt-docs` shows which models feed them.
+
+**Gold tests** add: composite keys unique, relationships to `dim_city` and `dim_country`, reciprocal rates (A->B times B->A between 0.999 and 1.001), 100 USD in AZN today between 169 and 171, every configured currency present today, 12 months per city in the climate aggregate, and exactly one `city_overview` row per city with today's forecast.
 
 dbt runs in a one-off container from our Airflow image and needs Trino, not Airflow:
 
