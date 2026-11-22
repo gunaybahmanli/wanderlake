@@ -213,3 +213,68 @@ models:
       - {name: advice_updated_at, data_type: timestamp(6) with time zone, description: When FCDO published the current advice.}
       - {name: best_months, data_type: array(varchar), description: The 3 month names with the highest pleasant_day_share (ties by month order).}
       - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built.}
+
+  - name: weather_forecast_latest
+    description: >
+      7-day forecast per configured city from that city's latest forecast run: one row per
+      (city_id, forecast_date), forecast_date from run_date to run_date + 6. Published to the
+      website (Supabase api.weather_forecast_latest).
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [city_id, forecast_date]}
+    columns:
+      - name: city_id
+        data_type: varchar
+        description: City slug.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('dim_city'), field: city_id}
+      - {name: forecast_date, data_type: date, description: Local date the forecast is for., data_tests: [not_null]}
+      - {name: run_date, data_type: date, description: Date of the forecast run used for this city., data_tests: [not_null]}
+      - {name: weather_code, data_type: integer, description: WMO weather code.}
+      - {name: weather_description, data_type: varchar, description: Description of the WMO code (seed wmo_weather_codes).}
+      - {name: temp_max_c, data_type: double, description: "Forecast maximum temperature, C."}
+      - {name: temp_min_c, data_type: double, description: "Forecast minimum temperature, C."}
+      - {name: temp_mean_c, data_type: double, description: "Forecast mean temperature, C."}
+      - {name: precipitation_mm, data_type: double, description: "Forecast precipitation, mm."}
+      - name: precipitation_probability
+        data_type: double
+        description: Forecast maximum precipitation probability, percent.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - {name: snowfall_cm, data_type: double, description: "Forecast snowfall, cm."}
+      - {name: wind_max_kmh, data_type: double, description: "Forecast maximum wind speed at 10 m, km/h."}
+      - {name: sunshine_hours, data_type: double, description: Forecast sunshine duration in hours.}
+      - {name: uv_index_max, data_type: double, description: Forecast maximum UV index.}
+      - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built.}
+
+  - name: travel_advice_current
+    description: >
+      Current UK FCDO travel advice: one row per country with its latest published version.
+      Texts are plain text cleaned from HTML (see silver.travel_advice). Published to the
+      website (Supabase api.travel_advice_current).
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: country_code
+        data_type: varchar
+        description: ISO 3166-1 alpha-2 code (primary key).
+        constraints: [{type: not_null}]
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments: {to: ref('dim_country'), field: cca2}
+      - {name: title, data_type: varchar, description: Page title (e.g. "Thailand travel advice").}
+      - {name: has_alert, data_type: boolean, description: True if there is at least one alert status., data_tests: [not_null]}
+      - {name: alert_statuses, data_type: array(varchar), description: FCDO alert statuses (empty if none).}
+      - {name: public_updated_at, data_type: timestamp(6) with time zone, description: When FCDO published this version (UTC)., data_tests: [not_null]}
+      - {name: change_description, data_type: varchar, description: FCDO's summary of what changed in this version.}
+      - {name: summary_text, data_type: varchar, description: "Headline advice (section 'warnings-and-insurance')."}
+      - {name: safety_text, data_type: varchar, description: "Section 'safety-and-security'."}
+      - {name: entry_requirements_text, data_type: varchar, description: "Section 'entry-requirements'."}
+      - {name: health_text, data_type: varchar, description: "Section 'health'."}
+      - {name: last_seen_snapshot_date, data_type: date, description: Latest daily snapshot that contained this version.}
+      - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built.}

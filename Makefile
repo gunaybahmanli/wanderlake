@@ -3,7 +3,8 @@
 	tofu-init tofu-fmt tofu-validate tofu-plan tofu-apply \
 	web-install web-dev web-lint web-build \
 	trino lakehouse-init lakehouse-smoke-test build mode-query mode-ingest mode-full weather-backfill \
-	config-load dbt-deps dbt-build dbt-test dbt-source-freshness dbt-docs dbt-manifest
+	config-load dbt-deps dbt-build dbt-test dbt-source-freshness dbt-docs dbt-manifest \
+	publish api-check
 
 PROFILE ?= core
 SERVICE ?=
@@ -179,3 +180,12 @@ dbt-docs: ## dbt: generate docs and serve them on http://localhost:8082 (needs m
 	@echo "dbt docs on http://localhost:$(DBT_DOCS_PORT) (Ctrl+C to stop)"
 	@$(COMPOSE_ALL) run --rm --no-deps -p $(DBT_DOCS_PORT):$(DBT_DOCS_PORT) dbt \
 		docs serve --host 0.0.0.0 --port $(DBT_DOCS_PORT) --no-browser
+
+publish: ## Cloud: publish gold to Supabase (api) and R2 Parquet, then verify row counts (needs Airflow)
+	@docker inspect -f '{{.State.Health.Status}}' wanderlake-airflow-1 2>/dev/null | grep -q healthy \
+		|| { echo "Airflow is not running: run 'make mode-full' (or mode-ingest) first."; exit 1; }
+	@$(COMPOSE_ALL) exec -T airflow python -m ingestion.publish
+
+api-check: ## Cloud: prove the public REST API is read-only for the anon key (SELECT ok, writes rejected)
+	@test -f .env || { echo "Missing .env"; exit 1; }
+	@set -a && . ./.env && set +a && ./supabase/check-read-only.sh

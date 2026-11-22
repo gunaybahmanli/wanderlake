@@ -1,0 +1,7 @@
+[sqlfluff]
+# Supabase migrations are PostgreSQL, not Trino (repo default in /.sqlfluff).
+dialect = postgres
+templater = raw
+# RF04: column names (name, date, month, year, timezone) mirror the dbt gold contracts and the
+# public API; Postgres accepts them unquoted.
+exclude_rules = RF04

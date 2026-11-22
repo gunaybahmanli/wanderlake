@@ -33,3 +33,7 @@ DAILY_TRANSFORM_INPUTS = (FRANKFURTER_RATES, CBAR_RATES, OPEN_METEO_FORECAST, OP
 
 # Gold: one asset for the whole layer, updated when a wanderlake_transform run completes.
 GOLD = Asset(name="gold", uri=f"iceberg://{CATALOG}/gold")
+
+# Supabase schema api (the website's read-only REST API), updated when publish_cloud verified
+# every table; for later consumers such as a website rebuild.
+SUPABASE_API = Asset(name="supabase.api", uri="supabase://wanderlake/api")

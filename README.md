@@ -233,6 +233,8 @@ Gold is shaped for its consumers: dimensions describe places, facts hold measure
 | `gold.fct_weather_daily` | fact | `city_id`, `weather_date` | daily weather with derived fields: `is_weekend`, `temp_range_c`, `is_rainy_day` (>= 1 mm), `sunshine_hours` |
 | `gold.agg_city_climate_monthly` | aggregate | `city_id`, `month` | averages over all loaded years, `pleasant_day_share` (below) |
 | `gold.city_overview` | serving | configured city | city fields, rates to EUR, USD and AZN today, today's forecast, current travel advice alert, `best_months` |
+| `gold.weather_forecast_latest` | serving | `city_id`, `forecast_date` | 7-day forecast from each city's latest run, with `weather_description` |
+| `gold.travel_advice_current` | serving | country with FCDO advice | current version: `has_alert`, `alert_statuses`, `public_updated_at`, `change_description` and the summary, safety, entry requirements and health texts |
 
 - **Conversion matrix and as-of rule:** `fct_exchange_rate` covers the city currencies plus EUR, USD and AZN, every ordered pair of different currencies, for every calendar day from the first rate date to today. Each day uses each currency's latest rate on or before that day (rates are not published on weekends and holidays), so `from_rate_date` and `to_rate_date` can be older than `date`; `source_from` and `source_to` say whether ECB or CBAR supplied each side. `rate` is the number of `to_currency` units per 1 `from_currency`, computed through the EUR base. The day spine is Trino's `sequence()`.
 - **Incremental weather:** `fct_weather_daily` merges on (`city_id`, `weather_date`) and reprocesses the last 7 days on each run (Open-Meteo revises recent days); a `--full-refresh` rebuilds the full history.
@@ -287,6 +289,7 @@ The Airflow container mounts `config/` read-only at `/opt/wanderlake/config`, so
 | `fcdo_advice` | daily 06:00 | [GOV.UK](https://www.gov.uk/foreign-travel-advice) FCDO foreign travel advice (OGL v3.0) | raw `s3://raw/fcdo/advice/snapshot_date=YYYY-MM-DD/<country_code>.json`, then bronze `iceberg.bronze.fcdo_advice` |
 | `config_cities` | daily 00:30, and on demand | `config/cities.yaml` (this repo) | `iceberg.bronze.config_cities` (full replace; no raw copy, the file is in git) |
 | `wanderlake_transform` | when the daily bronze assets are updated, or 18:00 fallback | the bronze tables above | dbt silver and gold (Cosmos), then the `gold` asset |
+| `publish_cloud` | when the `gold` asset is updated (no clock time) | the gold tables | Supabase schema `api` (read-only REST API) and R2 Parquet; see [Cloud publish](#cloud-publish) |
 
 ### Daily flow
 
@@ -299,11 +302,36 @@ Every load task above declares its bronze table as an Airflow **Asset** (`iceber
 16:30  cbar_rates ------- load_bronze -> bronze.cbar_rates ---------+   (or 18:00 UTC fallback)       |
                                                                                                      v
        rest_countries, geonames_cities, fcdo_advice, config_cities: assets too, never block      gold asset
+                                                                                                     |
+                                                     Supabase api (REST) + R2 Parquet <-- publish_cloud
 ```
 
 - **Schedule:** `AssetOrTimeSchedule`: a run when all four daily inputs have new events since the last asset-triggered run, or every day at 18:00 UTC. On a normal day the asset run starts at about 16:35 UTC. A fallback run first checks the `gold` asset and skips when gold was built in the last 20 hours, so the fallback only builds when ingestion failed or was late. Weekly and monthly sources (and FCDO) are read at their latest state.
 - **Tasks** (Astronomer Cosmos, one per dbt node): `gate` >> `source_freshness` (warnings logged, errors fail the run) >> `seeds` >> `models` (each model's `run` task followed by its `test` task; tests on several models run after all of them) >> `publish_gold`. A failing model or test stops only what depends on it, and a retry reruns only that node.
 - **Needs** `make mode-full` (Airflow and Trino together). Unpausing the DAG runs the latest missed 18:00 slot once (`catchup=False`).
+- **Then `publish_cloud`** runs on the `gold` asset event, so every successful transform is published once (below).
+
+### Cloud publish
+
+`publish_cloud` copies the gold tables the website needs from the laptop's lakehouse to free cloud services ([ADR-0010](docs/adr/0010-serve-site-from-supabase-rest-with-read-only-rls.md)). Code: [`ingestion/src/ingestion/publish/`](ingestion/src/ingestion/publish/).
+
+| Table | Supabase `api.<table>` | R2 (`wanderlake-lake`) |
+|---|---|---|
+| `dim_city`, `dim_country`, `city_overview`, `fct_weather_daily`, `agg_city_climate_monthly`, `weather_forecast_latest`, `travel_advice_current` | full table | `gold/<table>/snapshot_date=YYYY-MM-DD/data.parquet` and `gold/<table>/latest/data.parquet` |
+| `fct_exchange_rate` | last 400 days | same layout, last 400 days |
+
+- **Tasks:** `apply_migrations` (new SQL files in [`supabase/migrations/`](supabase/migrations/): schema `api`, tables, RLS, grants) >> `publish_table` (one mapped task per table) >> `verify_counts`.
+- **Per table:** read `gold.<table>` with PyIceberg (no Trino needed), write both Parquet files to R2, then replace `api.<table>` in **one transaction** (COPY into a temporary staging table, delete, insert): API readers see the old rows or the new rows, never a partial table.
+- **Verification:** source rows, Supabase `count(*)` and the row counts of both Parquet files read back from R2 must be equal for every table, or the run fails with the full table of counts.
+- **Read-only public API:** the website reads `https://<ref>.supabase.co/rest/v1/<table>` with the anon key and the header `Accept-Profile: api`. Row-level security with a SELECT-only policy plus SELECT-only grants mean the anon key can read and nothing else; OpenTofu (`supabase_settings`) exposes the schema.
+
+```bash
+make mode-full     # or mode-ingest: the job itself needs only Airflow
+make publish       # same code as the DAG; prints source vs Supabase vs R2 counts
+make api-check     # anon SELECT works; INSERT, UPDATE, DELETE are rejected
+```
+
+Credentials (`CLOUD_S3_*`, `SUPABASE_DB_*`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`) come from `.env`; the [cloud runbook](docs/runbooks/cloud-setup.md) covers creating and rotating them. A published gold column is part of the API: change it with a new Supabase migration in the same change (a test compares the migrations with the dbt contracts).
 
 ### `frankfurter_rates`
 
