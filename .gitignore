@@ -75,6 +75,8 @@ dbt_packages/
 # ---------- Data ----------
 data/
 **/data/
+# Code, not data: the website's data-access layer.
+!web/lib/data/
 
 # ---------- IDE ----------
 .vscode/

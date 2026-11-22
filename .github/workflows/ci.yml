@@ -151,8 +151,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Build
+      - name: Unit tests
+        run: npm test
+
+      - name: Build (fixture data, no Supabase or secrets needed)
         run: npm run build
+        env:
+          DATA_SOURCE: fixture
 
   airflow-image:
     name: Airflow image build

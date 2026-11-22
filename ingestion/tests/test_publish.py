@@ -57,7 +57,7 @@ def test_unknown_table_is_an_error() -> None:
 
 
 def api_tables_in_migrations() -> dict[str, dict[str, str]]:
-    """{table: {column: type}} from the create table statements of the migrations."""
+    """{table: {column: type}} after the create table and add column statements, in order."""
     tables: dict[str, dict[str, str]] = {}
     for m in migrations.discover(MIGRATIONS_DIR):
         for name, body in re.findall(
@@ -72,6 +72,10 @@ def api_tables_in_migrations() -> dict[str, dict[str, str]]:
                 rest = re.sub(r" (primary key|not null)", "", rest)
                 columns[col] = rest
             tables[name] = columns
+        for name, col, col_type in re.findall(
+            r"alter table api\.(\w+) add column if not exists (\w+) ([^;]+);", m.sql
+        ):
+            tables[name][col] = re.sub(r" (primary key|not null)", "", col_type.strip())
     return tables
 
 

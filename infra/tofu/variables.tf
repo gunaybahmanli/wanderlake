@@ -78,3 +78,17 @@ variable "vercel_team" {
   type        = string
   default     = "me-f548"
 }
+
+variable "supabase_anon_key" {
+  description = "Supabase anon key for the website (from SUPABASE_ANON_KEY; the Makefile passes it)."
+  type        = string
+  sensitive   = true
+  # Ephemeral: used only for the write-only Vercel value below, never stored in state or plans.
+  ephemeral = true
+}
+
+variable "supabase_anon_key_version" {
+  description = "Bump after rotating the anon key: OpenTofu re-sends the write-only value only on change."
+  type        = number
+  default     = 1
+}

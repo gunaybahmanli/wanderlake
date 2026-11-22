@@ -1,21 +1,19 @@
 import type { Metadata, Viewport } from "next";
+
+import { SiteFooter } from "@/components/SiteFooter";
+import { SiteHeader } from "@/components/SiteHeader";
+import { SITE_NAME, SITE_URL } from "@/lib/site";
+
 import "./globals.css";
 
-const title = "Wanderlake";
 const description =
-  "Global travel intelligence on a self-built open-source lakehouse, with AI.";
+  "City guides built from open data: weather, climate, currencies and official travel advice.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://wanderlake.vercel.app"),
-  title,
+  metadataBase: new URL(SITE_URL),
+  title: { default: `${SITE_NAME}: city travel guides from open data`, template: `%s | ${SITE_NAME}` },
   description,
-  openGraph: {
-    title,
-    description,
-    url: "/",
-    siteName: title,
-    type: "website",
-  },
+  openGraph: { siteName: SITE_NAME, type: "website", url: "/", description },
 };
 
 export const viewport: Viewport = {
@@ -27,8 +25,17 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en-GB">
+      <body>
+        <a className="skip-link" href="#main">
+          Skip to content
+        </a>
+        <SiteHeader />
+        <main id="main" className="container main">
+          {children}
+        </main>
+        <SiteFooter />
+      </body>
     </html>
   );
 }

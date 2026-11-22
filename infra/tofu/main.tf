@@ -73,3 +73,27 @@ resource "supabase_settings" "wanderlake" {
     max_rows             = 1000
   })
 }
+
+# Website -> Supabase REST API (ADR-0010). Server-side variables (not NEXT_PUBLIC_*): the pages
+# read Supabase on the server, so the key is never sent to browsers. Production and preview
+# builds; local development uses web/.env.local (make web-env).
+resource "vercel_project_environment_variable" "supabase_url" {
+  project_id = vercel_project.wanderlake.id
+  key        = "SUPABASE_URL"
+  value      = "https://${supabase_project.wanderlake.id}.supabase.co"
+  target     = ["production", "preview"]
+  sensitive  = false # the project URL is an identifier, not a secret
+  comment    = "Supabase project URL for the server-side data layer (web/lib/data)."
+}
+
+resource "vercel_project_environment_variable" "supabase_anon_key" {
+  project_id = vercel_project.wanderlake.id
+  key        = "SUPABASE_ANON_KEY"
+  # Write-only: sent to Vercel but never stored in OpenTofu state. Changing the key alone does
+  # not trigger an update; bump supabase_anon_key_version after a rotation.
+  value_wo         = var.supabase_anon_key
+  value_wo_version = var.supabase_anon_key_version
+  target           = ["production", "preview"]
+  sensitive        = true # Vercel hides the value after creation
+  comment          = "Supabase anon key (read-only by RLS) for the server-side data layer."
+}

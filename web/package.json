@@ -9,12 +9,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.119.0",
     "next": "16.4.6",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "server-only": "0.0.1"
   },
   "devDependencies": {
     "@types/node": "^26",
@@ -22,6 +25,7 @@
     "@types/react-dom": "^19",
     "eslint": "^10.15.0",
     "eslint-config-next": "16.4.6",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "5.1.0"
   }
 }

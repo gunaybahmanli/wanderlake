@@ -267,6 +267,7 @@ models:
           - not_null
           - relationships:
               arguments: {to: ref('dim_country'), field: cca2}
+      - {name: slug, data_type: varchar, description: "GOV.UK page slug: https://www.gov.uk/foreign-travel-advice/<slug>.", data_tests: [not_null]}
       - {name: title, data_type: varchar, description: Page title (e.g. "Thailand travel advice").}
       - {name: has_alert, data_type: boolean, description: True if there is at least one alert status., data_tests: [not_null]}
       - {name: alert_statuses, data_type: array(varchar), description: FCDO alert statuses (empty if none).}
