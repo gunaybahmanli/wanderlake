@@ -68,7 +68,13 @@ jobs:
     env:
       AIRFLOW_HOME: ${{ github.workspace }}/.airflow-ci
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-      PYTHONPATH: ingestion/src
+      # The DAGs folder holds helper modules (wanderlake_assets), as in the container.
+      PYTHONPATH: ingestion/src:airflow/dags
+      # wanderlake_transform (Cosmos) renders from a manifest built below, never by running dbt.
+      DBT_PROJECT_DIR: ${{ github.workspace }}/dbt
+      DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
+      DBT_MANIFEST_PATH: ${{ github.workspace }}/dbt/target/manifest.json
+      DBT_EXECUTABLE_PATH: ${{ github.workspace }}/.venv-dbt/bin/dbt
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -80,6 +86,7 @@ jobs:
           cache-dependency-glob: |
             .github/workflows/ci.yml
             infra/airflow/requirements.txt
+            infra/airflow/requirements-dbt.txt
 
       - name: Install Airflow and the image's extra packages with official constraints
         run: |
@@ -88,6 +95,12 @@ jobs:
             "apache-airflow==${AIRFLOW_VERSION}" pytest \
             -r infra/airflow/requirements.txt \
             --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
+
+      - name: Build the dbt manifest for Cosmos (dbt deps + parse, no database needed)
+        run: |
+          uv venv .venv-dbt --python "$PYTHON_VERSION"
+          uv pip install --python .venv-dbt -r infra/airflow/requirements-dbt.txt
+          cd dbt && "$DBT_EXECUTABLE_PATH" deps && "$DBT_EXECUTABLE_PATH" parse
 
       - name: Run DAG integrity tests
         run: .venv-airflow/bin/python -m pytest tests/dags -v

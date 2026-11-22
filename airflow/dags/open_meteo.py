@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from airflow.sdk import dag, get_current_context, task
+from wanderlake_assets import OPEN_METEO_FORECAST, OPEN_METEO_HISTORY
 
 RAW_BUCKET = "raw"
 
@@ -61,7 +62,7 @@ def open_meteo():
 
         return ingest_forecast(run_date(), bucket=RAW_BUCKET)
 
-    @task
+    @task(outlets=[OPEN_METEO_FORECAST])
     def load_forecast() -> dict:
         from ingestion.sources.open_meteo import load_forecast as load
 
@@ -73,7 +74,7 @@ def open_meteo():
 
         return ingest_recent_history(run_date(), bucket=RAW_BUCKET)
 
-    @task
+    @task(outlets=[OPEN_METEO_HISTORY])
     def load_history() -> dict:
         from ingestion.sources.open_meteo import load_recent_history
 

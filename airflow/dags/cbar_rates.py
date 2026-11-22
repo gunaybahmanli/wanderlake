@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from airflow.sdk import dag, get_current_context, task
+from wanderlake_assets import CBAR_RATES
 
 RAW_BUCKET = "raw"
 
@@ -55,7 +56,7 @@ def cbar_rates():
 
         return ingest_rates(run_date(), bucket=RAW_BUCKET)
 
-    @task
+    @task(outlets=[CBAR_RATES])
     def load_bronze() -> dict:
         from ingestion.sources.cbar import load_bronze as load
 

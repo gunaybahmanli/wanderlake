@@ -71,3 +71,60 @@ class TestDagRules:
         )
         for task in dag.tasks:
             assert task.owner == owner, f"{dag_id}.{task.task_id}: owner {task.owner!r}"
+
+
+class TestWanderlakeTransform:
+    """Cosmos DAG: asset-or-time schedule, freshness first, seeds before models, tests per model."""
+
+    DAG_ID = "wanderlake_transform"
+
+    def test_schedule_is_assets_or_daily_time(self, dagbag: DagBag) -> None:
+        from airflow.timetables.assets import AssetOrTimeSchedule
+
+        timetable = dagbag.dags[self.DAG_ID].timetable
+        assert isinstance(timetable, AssetOrTimeSchedule)
+        assert "0 18 * * *" in timetable.summary
+
+    def test_daily_inputs_trigger_it(self, dagbag: DagBag) -> None:
+        from wanderlake_assets import DAILY_TRANSFORM_INPUTS
+
+        dag = dagbag.dags[self.DAG_ID]
+        uris = {asset.uri for _, asset in dag.timetable.asset_condition.iter_assets()}
+        assert uris == {asset.uri for asset in DAILY_TRANSFORM_INPUTS}
+
+    def test_every_input_has_a_producer(self, dagbag: DagBag) -> None:
+        from wanderlake_assets import DAILY_TRANSFORM_INPUTS
+
+        produced = {
+            outlet.uri
+            for dag in dagbag.dags.values()
+            for task in dag.tasks
+            for outlet in (task.outlets or [])
+        }
+        missing = {asset.uri for asset in DAILY_TRANSFORM_INPUTS} - produced
+        assert not missing, f"no task declares these assets as outlets: {missing}"
+
+    def test_order_and_tasks(self, dagbag: DagBag) -> None:
+        dag = dagbag.dags[self.DAG_ID]
+        ids = [task.task_id for task in dag.topological_sort()]
+        assert ids[:2] == ["gate", "source_freshness"]
+        assert ids[-1] == "publish_gold"
+        seed_tasks = [i for i, task_id in enumerate(ids) if task_id.startswith("seeds.")]
+        model_tasks = [i for i, task_id in enumerate(ids) if task_id.startswith("models.")]
+        assert seed_tasks and model_tasks and max(seed_tasks) < min(model_tasks)
+        assert "models.city_overview.run" in ids and "models.city_overview.test" in ids
+
+
+def test_gate_skips_only_a_fallback_run_after_a_recent_build() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from wanderlake_transform import should_build
+
+    now = datetime(2026, 11, 22, 18, 0, tzinfo=UTC)
+    built_today = now - timedelta(hours=1, minutes=25)  # asset-triggered run at 16:35
+    built_yesterday = now - timedelta(hours=25)
+    assert should_build("scheduled", built_today, now) is False
+    assert should_build("scheduled", built_yesterday, now) is True
+    assert should_build("scheduled", None, now) is True
+    for run_type in ("asset_triggered", "manual", "backfill"):
+        assert should_build(run_type, built_today, now) is True

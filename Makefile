@@ -2,8 +2,8 @@
 .PHONY: help setup lint format test clean up down ps logs psql s3-ls backfill test-dags \
 	tofu-init tofu-fmt tofu-validate tofu-plan tofu-apply \
 	web-install web-dev web-lint web-build \
-	trino lakehouse-init lakehouse-smoke-test build mode-query mode-ingest weather-backfill \
-	config-load dbt-deps dbt-build dbt-test dbt-source-freshness dbt-docs
+	trino lakehouse-init lakehouse-smoke-test build mode-query mode-ingest mode-full weather-backfill \
+	config-load dbt-deps dbt-build dbt-test dbt-source-freshness dbt-docs dbt-manifest
 
 PROFILE ?= core
 SERVICE ?=
@@ -15,9 +15,9 @@ REPROCESS ?= none
 MAX_ACTIVE_RUNS ?= 1
 WEATHER_START ?= 2023-01-01
 
-# dbt runs in a one-off container from our Airflow image (dbt in /opt/dbt-venv), project mounted.
-# It needs Trino (make mode-query), not the Airflow service.
-DBT_RUN = $(COMPOSE_ALL) run --rm --no-deps --entrypoint /opt/dbt-venv/bin/dbt
+# dbt runs in a one-off container of the compose service "dbt" (our Airflow image, dbt in
+# /opt/dbt-venv, project mounted read-write). It needs Trino (make mode-query), not Airflow.
+DBT_RUN = $(COMPOSE_ALL) run --rm --no-deps dbt
 DBT_DOCS_PORT ?= 8082
 REQUIRE_TRINO = @docker inspect -f '{{.State.Health.Status}}' wanderlake-trino-1 2>/dev/null | grep -q healthy \
 	|| { echo "Trino is not running: run 'make mode-query' first."; exit 1; }
@@ -69,7 +69,7 @@ up: ## Start PROFILE (default core); several at once: make up PROFILE="core quer
 	@$(COMPOSE) up -d
 
 # Modes for a 4 GB machine: Airflow and Trino are not meant to run together for long.
-# Both work whether the containers exist yet or not (compose creates what is missing).
+# All modes work whether the containers exist yet or not (compose creates what is missing).
 mode-query: ## Query mode: postgres + seaweedfs + trino running, airflow stopped
 	@$(COMPOSE_ALL) stop airflow
 	@$(COMPOSE_ALL) up -d --wait postgres seaweedfs trino
@@ -78,6 +78,10 @@ mode-query: ## Query mode: postgres + seaweedfs + trino running, airflow stopped
 mode-ingest: ## Ingest mode: core profile running (postgres, seaweedfs, airflow), trino stopped
 	@$(COMPOSE_ALL) stop trino
 	@$(COMPOSE_BASE) --profile core up -d --wait postgres seaweedfs airflow
+	@$(COMPOSE_ALL) ps --format 'table {{.Service}}\t{{.Status}}'
+
+mode-full: ## Full mode: core + trino (wanderlake_transform needs Airflow and Trino; watch memory)
+	@$(COMPOSE_BASE) --profile core --profile query up -d --wait postgres seaweedfs airflow trino
 	@$(COMPOSE_ALL) ps --format 'table {{.Service}}\t{{.Status}}'
 
 down: ## Stop all services of every profile (data volumes are kept)
@@ -151,23 +155,27 @@ config-load: ## Copy config/cities.yaml into iceberg.bronze.config_cities (full 
 	@$(COMPOSE_ALL) run --rm --no-deps --entrypoint python airflow -m ingestion.sources.config_cities
 
 dbt-deps: ## dbt: install packages (dbt_utils)
-	@$(DBT_RUN) airflow deps
+	@$(DBT_RUN) deps
+
+dbt-manifest: ## dbt: parse the project into dbt/target/manifest.json for Cosmos (rerun after model changes)
+	@$(DBT_RUN) parse
+	@echo "dbt/target/manifest.json updated: wanderlake_transform picks it up on the next DAG parse."
 
 dbt-build: ## dbt: build all models and run all tests (needs make mode-query)
 	$(REQUIRE_TRINO)
-	@$(DBT_RUN) airflow build
+	@$(DBT_RUN) build
 
 dbt-test: ## dbt: run tests only (needs make mode-query)
 	$(REQUIRE_TRINO)
-	@$(DBT_RUN) airflow test
+	@$(DBT_RUN) test
 
 dbt-source-freshness: ## dbt: check source freshness (needs make mode-query)
 	$(REQUIRE_TRINO)
-	@$(DBT_RUN) airflow source freshness
+	@$(DBT_RUN) source freshness
 
 dbt-docs: ## dbt: generate docs and serve them on http://localhost:8082 (needs make mode-query)
 	$(REQUIRE_TRINO)
-	@$(DBT_RUN) airflow docs generate
+	@$(DBT_RUN) docs generate
 	@echo "dbt docs on http://localhost:$(DBT_DOCS_PORT) (Ctrl+C to stop)"
-	@$(COMPOSE_ALL) run --rm --no-deps -p $(DBT_DOCS_PORT):$(DBT_DOCS_PORT) --entrypoint /opt/dbt-venv/bin/dbt airflow \
+	@$(COMPOSE_ALL) run --rm --no-deps -p $(DBT_DOCS_PORT):$(DBT_DOCS_PORT) dbt \
 		docs serve --host 0.0.0.0 --port $(DBT_DOCS_PORT) --no-browser

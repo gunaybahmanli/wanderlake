@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from airflow.sdk import dag, get_current_context, task
+from wanderlake_assets import FCDO_ADVICE
 
 RAW_BUCKET = "raw"
 
@@ -57,7 +58,7 @@ def fcdo_advice():
 
         return ingest_snapshot(snapshot_date(), bucket=RAW_BUCKET)
 
-    @task
+    @task(outlets=[FCDO_ADVICE])
     def load_bronze() -> dict:
         from ingestion.sources.fcdo import load_bronze as load
 

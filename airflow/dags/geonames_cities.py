@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from airflow.sdk import dag, get_current_context, task
+from wanderlake_assets import GEONAMES_CITIES
 
 RAW_BUCKET = "raw"
 
@@ -58,7 +59,7 @@ def geonames_cities():
 
         return ingest_snapshot(snapshot_date(), bucket=RAW_BUCKET)
 
-    @task
+    @task(outlets=[GEONAMES_CITIES])
     def load_bronze() -> dict:
         from ingestion.sources.geonames import load_bronze as load
 
