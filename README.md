@@ -92,14 +92,16 @@ Prerequisites: Docker with Docker Compose v2, `make`, and about 3 GB of free RAM
 
    Airflow runs on a custom image, `wanderlake-airflow:local`, built from [`infra/airflow/`](infra/airflow/): the official Airflow 3.4.0 image plus PyIceberg, Astronomer Cosmos, and dbt-trino in a separate virtualenv ([ADR-0007](docs/adr/0007-custom-airflow-image.md)). `make up` builds it the first time; after changing anything in `infra/airflow/`, run `make build` and then `make up` again.
 
-   **Memory tips (4 GB machines).** Airflow and Trino together use most of a 4 GB WSL machine, so switch between two modes instead of running everything at once:
+   **Memory tips (4 GB machines).** Airflow and Trino together use most of a 4 GB WSL machine, so switch between three modes instead of leaving everything running:
 
-   ```bash
-   make mode-ingest   # postgres + seaweedfs + airflow; trino stopped (pipelines, backfills)
-   make mode-query    # postgres + seaweedfs + trino; airflow stopped (lakehouse queries)
-   ```
+   | Mode | Running | Use it for | Memory (measured) |
+   |---|---|---|---|
+   | `make mode-ingest` | postgres, seaweedfs, airflow (trino stopped) | ingestion DAGs, backfills | about 1.3 GiB idle |
+   | `make mode-query` | postgres, seaweedfs, trino (airflow stopped) | Trino queries, `make dbt-*` | about 1.1 GiB idle |
+   | `make mode-full` | postgres, seaweedfs, airflow, trino | `wanderlake_transform` (dbt from Airflow needs Trino) | peak 2.4 GiB during a transform run (airflow 1.36 GiB, trino 1.04 GiB); WSL `available` never below 676 MB |
 
-   - Both modes work whether the containers exist or not, and they wait until the services are healthy. On a brand-new install, run `make up` once first: it also runs the one-shot bucket setup.
+   - Full mode is the tightest: run it for `wanderlake_transform` (about 8-10 minutes) and go back to `make mode-ingest` afterwards. If WSL `available` memory (`free -m`) falls below about 500 MB, stop Trino first.
+   - All modes work whether the containers exist or not, and they wait until the services are healthy. On a brand-new install, run `make up` once first: it also runs the one-shot bucket setup.
    - Trino does not restart on its own (`restart: "no"`), so a WSL restart never brings the whole stack back at once.
    - Run backfills one date at a time (`MAX_ACTIVE_RUNS=1`, the default).
    - **One Airflow task at a time** (`AIRFLOW__CORE__PARALLELISM=1`, `mem_limit: 2g`). Airflow idles at about 1.0 GiB, and every running task adds about 0.45 GiB, because Airflow 3 runs each task in its own supervisor and worker processes (the GeoNames load measured 1.48 GiB at its peak). Two tasks at once, such as `frankfurter_rates` and `cbar_rates` at 16:30, could pass 1.9 GiB, so tasks queue instead; that costs about a minute a day. This is sized for an 8 GB laptop with WSL limited to 4 GB: **revisit both settings after the RAM upgrade.**
@@ -240,12 +242,13 @@ Gold is shaped for its consumers: dimensions describe places, facts hold measure
 
 **Gold tests** add: composite keys unique, relationships to `dim_city` and `dim_country`, reciprocal rates (A->B times B->A between 0.999 and 1.001), 100 USD in AZN today between 169 and 171, every configured currency present today, 12 months per city in the climate aggregate, and exactly one `city_overview` row per city with today's forecast.
 
-dbt runs in a one-off container from our Airflow image and needs Trino, not Airflow:
+In production the DAG `wanderlake_transform` runs dbt (see [Daily flow](#daily-flow)). By hand, dbt runs in a one-off container of the compose service `dbt` (our Airflow image, project mounted read-write) and needs Trino, not Airflow:
 
 ```bash
 make mode-query              # postgres + seaweedfs + trino
 make config-load             # copy config/cities.yaml to bronze.config_cities (also a daily DAG)
 make dbt-deps                # install dbt packages (dbt_utils)
+make dbt-manifest            # dbt parse -> dbt/target/manifest.json, read by wanderlake_transform
 make dbt-build               # build all models and run all tests
 make dbt-test                # tests only
 make dbt-source-freshness    # are the bronze sources up to date?
@@ -256,7 +259,8 @@ make mode-ingest             # back to Airflow
 - Models land in exactly the schema they declare (`silver`, `gold`); `profiles.yml` takes every connection value from environment variables.
 - `bronze.config_cities` is a full copy of `config/cities.yaml` for SQL (the `config_cities` DAG and `make config-load` refresh it); the YAML stays the single source of truth.
 - SQL is linted by sqlfluff with the jinja templater and dbt builtins; the "dbt parse" CI job checks the project without a database.
-- On Linux/WSL, `AIRFLOW_UID` in `.env` must be your user id (`id -u`), so the containers can write `dbt/target` and `dbt/logs`.
+- **Run `make dbt-manifest` after changing models, tests or seeds** (no database needed): `wanderlake_transform` renders its tasks from `dbt/target/manifest.json` and never runs dbt while parsing, so until then it keeps the old graph. Any `make dbt-*` command also rewrites the manifest.
+- On Linux/WSL, `AIRFLOW_UID` in `.env` must be your user id (`id -u`), so the `dbt` container can write `dbt/target`, `dbt/logs` and `dbt/dbt_packages`. The Airflow container mounts `dbt/` read-only: Cosmos runs every dbt command in a temporary copy of the project.
 
 ## Cities
 
@@ -282,6 +286,24 @@ The Airflow container mounts `config/` read-only at `/opt/wanderlake/config`, so
 | `open_meteo` | daily 05:00 | [Open-Meteo](https://open-meteo.com) forecast (7 days) and archive (last 7 days); CC BY 4.0 | raw `s3://raw/open_meteo/{forecast,history}/...`, then bronze `iceberg.bronze.open_meteo_forecast` and `iceberg.bronze.open_meteo_history` |
 | `fcdo_advice` | daily 06:00 | [GOV.UK](https://www.gov.uk/foreign-travel-advice) FCDO foreign travel advice (OGL v3.0) | raw `s3://raw/fcdo/advice/snapshot_date=YYYY-MM-DD/<country_code>.json`, then bronze `iceberg.bronze.fcdo_advice` |
 | `config_cities` | daily 00:30, and on demand | `config/cities.yaml` (this repo) | `iceberg.bronze.config_cities` (full replace; no raw copy, the file is in git) |
+| `wanderlake_transform` | when the daily bronze assets are updated, or 18:00 fallback | the bronze tables above | dbt silver and gold (Cosmos), then the `gold` asset |
+
+### Daily flow
+
+Every load task above declares its bronze table as an Airflow **Asset** (`iceberg://wanderlake/bronze/<table>`, defined in [`airflow/dags/wanderlake_assets.py`](airflow/dags/wanderlake_assets.py)); a successful load records an asset event. `wanderlake_transform` is scheduled on those events ([ADR-0009](docs/adr/0009-orchestrate-dbt-with-cosmos-and-assets.md)):
+
+```
+05:00  open_meteo ---- load_forecast -> bronze.open_meteo_forecast --+
+                    \- load_history  -> bronze.open_meteo_history ---+
+16:30  frankfurter_rates - load_bronze -> bronze.frankfurter_rates --+-- all four updated --> wanderlake_transform
+16:30  cbar_rates ------- load_bronze -> bronze.cbar_rates ---------+   (or 18:00 UTC fallback)       |
+                                                                                                     v
+       rest_countries, geonames_cities, fcdo_advice, config_cities: assets too, never block      gold asset
+```
+
+- **Schedule:** `AssetOrTimeSchedule`: a run when all four daily inputs have new events since the last asset-triggered run, or every day at 18:00 UTC. On a normal day the asset run starts at about 16:35 UTC. A fallback run first checks the `gold` asset and skips when gold was built in the last 20 hours, so the fallback only builds when ingestion failed or was late. Weekly and monthly sources (and FCDO) are read at their latest state.
+- **Tasks** (Astronomer Cosmos, one per dbt node): `gate` >> `source_freshness` (warnings logged, errors fail the run) >> `seeds` >> `models` (each model's `run` task followed by its `test` task; tests on several models run after all of them) >> `publish_gold`. A failing model or test stops only what depends on it, and a retry reruns only that node.
+- **Needs** `make mode-full` (Airflow and Trino together). Unpausing the DAG runs the latest missed 18:00 slot once (`catchup=False`).
 
 ### `frankfurter_rates`
 

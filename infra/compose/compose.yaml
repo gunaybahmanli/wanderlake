@@ -3,7 +3,8 @@
 # --env-file .env and --profile. Relative paths below resolve from this folder.
 #
 # Memory budget (WSL2 = 4 GB). Limits: core = postgres 512m + seaweedfs 640m + airflow 2g;
-# query = trino 1.2g. One-shot init containers run for a few seconds only.
+# query = trino 1.2g; tools = dbt 768m (make dbt-*, one-off). One-shot init containers run for a
+# few seconds only. Full mode (make mode-full) = core + trino, for wanderlake_transform.
 # Several profiles at once: make up PROFILE="core query".
 
 name: wanderlake
@@ -168,6 +169,28 @@ services:
       start_period: 60s
 
   # ---------------------------------------------------------------------------
+  # dbt CLI for make dbt-* (one-off containers: docker compose run --rm dbt <command>).
+  # Same image as Airflow (dbt in /opt/dbt-venv), only the dbt settings, and a read-write project
+  # mount: dbt writes target/ (manifest.json for Cosmos), logs/ and dbt_packages/ here.
+  # ---------------------------------------------------------------------------
+  dbt:
+    image: wanderlake-airflow:local
+    profiles: ["tools"]
+    restart: "no"
+    mem_limit: 768m
+    user: "${AIRFLOW_UID:-50000}:0"
+    entrypoint: ["/opt/dbt-venv/bin/dbt"]
+    working_dir: /opt/wanderlake/dbt
+    environment:
+      DBT_PROFILES_DIR: /opt/wanderlake/dbt
+      DBT_PROJECT_DIR: /opt/wanderlake/dbt
+      DBT_TRINO_HOST: trino
+      DBT_TRINO_PORT: "8080"
+      DBT_TRINO_USER: dbt
+    volumes:
+      - ../../dbt:/opt/wanderlake/dbt
+
+  # ---------------------------------------------------------------------------
   # Apache Airflow 3 (standalone: api-server, scheduler, dag-processor, triggerer)
   # ---------------------------------------------------------------------------
   airflow:
@@ -187,8 +210,9 @@ services:
       seaweedfs:
         condition: service_healthy
     environment:
-      # Wanderlake ingestion package (mounted below), importable from DAGs and tasks.
-      PYTHONPATH: /opt/wanderlake/ingestion/src
+      # Wanderlake ingestion package (mounted below) and the DAGs folder's helper modules
+      # (wanderlake_assets), importable from DAGs and tasks in every Airflow process.
+      PYTHONPATH: /opt/wanderlake/ingestion/src:/opt/airflow/dags
       # Generic S3 settings for the ingestion package (internal endpoint inside Docker).
       S3_ENDPOINT: http://seaweedfs:8333
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env}
@@ -202,9 +226,10 @@ services:
       ICEBERG_CATALOG_DB_PASSWORD: ${ICEBERG_CATALOG_DB_PASSWORD:?set ICEBERG_CATALOG_DB_PASSWORD in .env}
       # Source API keys (only for the DAGs that need them)
       REST_COUNTRIES_API_KEY: ${REST_COUNTRIES_API_KEY:?set REST_COUNTRIES_API_KEY in .env}
-      # dbt (dbt/profiles.yml reads these); dbt runs from /opt/dbt-venv
+      # dbt (dbt/profiles.yml reads these); dbt runs from /opt/dbt-venv (Cosmos, wanderlake_transform)
       DBT_PROFILES_DIR: /opt/wanderlake/dbt
       DBT_PROJECT_DIR: /opt/wanderlake/dbt
+      DBT_MANIFEST_PATH: /opt/wanderlake/dbt/target/manifest.json # built by make dbt-manifest
       DBT_TRINO_HOST: trino
       DBT_TRINO_PORT: "8080"
       DBT_TRINO_USER: dbt
@@ -234,7 +259,9 @@ services:
       - ../../airflow/dags:/opt/airflow/dags
       - ../../ingestion/src:/opt/wanderlake/ingestion/src:ro
       - ../../config:/opt/wanderlake/config:ro # cities.yaml, read by ingestion.config
-      - ../../dbt:/opt/wanderlake/dbt # read-write: dbt writes target/, logs/, dbt_packages/
+      # Read-only: Cosmos runs each dbt command in a temporary copy of the project (symlinks; target/
+      # and logs/ are created there), so Airflow never writes here. make dbt-* writes via the dbt service.
+      - ../../dbt:/opt/wanderlake/dbt:ro
       - ../../tests:/opt/wanderlake/tests:ro # for make test-dags
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/v2/monitor/health"]

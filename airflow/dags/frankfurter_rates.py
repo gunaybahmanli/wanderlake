@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from airflow.sdk import dag, get_current_context, task
+from wanderlake_assets import FRANKFURTER_RATES
 
 RAW_BUCKET = "raw"
 
@@ -56,7 +57,7 @@ def frankfurter_rates():
 
         return ingest_rates(run_date(), bucket=RAW_BUCKET)
 
-    @task
+    @task(outlets=[FRANKFURTER_RATES])
     def load_bronze() -> dict:
         from ingestion.sources.frankfurter import load_bronze as load
 

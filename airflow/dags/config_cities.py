@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from airflow.sdk import dag, get_current_context, task
+from wanderlake_assets import CONFIG_CITIES
 
 DOC_MD = """
 ### Cities config to bronze
@@ -34,7 +35,7 @@ Code lives in `ingestion.sources.config_cities`.
     doc_md=DOC_MD,
 )
 def config_cities():
-    @task
+    @task(outlets=[CONFIG_CITIES])
     def load() -> dict:
         from ingestion.sources.config_cities import load as load_config
 

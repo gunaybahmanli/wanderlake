@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from airflow.sdk import dag, get_current_context, task
+from wanderlake_assets import REST_COUNTRIES
 
 RAW_BUCKET = "raw"
 
@@ -56,7 +57,7 @@ def rest_countries():
 
         return ingest_snapshot(snapshot_date(), bucket=RAW_BUCKET)
 
-    @task
+    @task(outlets=[REST_COUNTRIES])
     def load_bronze() -> dict:
         from ingestion.sources.rest_countries import load_bronze as load
 
