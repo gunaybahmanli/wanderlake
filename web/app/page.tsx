@@ -1,51 +1,78 @@
-const REPO_URL = "https://github.com/gunaybahmanli/wanderlake";
-const README_URL = `${REPO_URL}/blob/main/README.md`;
+import Link from "next/link";
 
-// Read at build time: Vercel builds once per commit, so this is the deployed commit.
-function deployedCommit(): { label: string; href?: string } {
-  const sha = process.env.VERCEL_GIT_COMMIT_SHA;
-  if (!sha) return { label: "local" };
-  return { label: sha.slice(0, 7), href: `${REPO_URL}/commit/${sha}` };
+import { CityImage } from "@/components/CityImage";
+import { DataUnavailable } from "@/components/DataUnavailable";
+import { Flag } from "@/components/Flag";
+import { getGoodThisMonth, loadOrUnavailable } from "@/lib/data";
+import { formatShare, formatTemp, monthName } from "@/lib/data/helpers";
+
+async function GoodThisMonth() {
+  const result = await loadOrUnavailable(getGoodThisMonth);
+  if (!result.ok) return <DataUnavailable />;
+  const { month, ranked } = result.data;
+  const name = monthName(month);
+
+  return (
+    <section aria-labelledby="this-month">
+      <h2 id="this-month">Good to visit in {name}</h2>
+      <p className="muted">
+        Ranked by the share of pleasant days in {name} over recent years: a maximum temperature
+        between 18 and 28&nbsp;&deg;C and less than 1&nbsp;mm of rain.
+      </p>
+      {ranked.length === 0 ? (
+        <p>No climate data for this month yet.</p>
+      ) : (
+        <ol className="ranking">
+          {ranked.map(({ city, climate }, i) => (
+            <li key={city.city_id} className="ranking-item">
+              <span className="ranking-pos" aria-hidden="true">
+                {i + 1}
+              </span>
+              <CityImage name={city.name} size="card" />
+              <div className="ranking-body">
+                <h3>
+                  <Link href={`/cities/${city.city_id}`} prefetch={true}>
+                    {city.name}
+                  </Link>
+                </h3>
+                <p className="card-country">
+                  <Flag src={city.flag_png_url} country={city.country_name} />
+                  <span>{city.country_name}</span>
+                </p>
+                <p>
+                  <strong>{formatShare(climate.pleasant_day_share ?? 0)}</strong> pleasant days,
+                  typically {formatTemp(climate.avg_temp_max_c)} by day and{" "}
+                  {formatTemp(climate.avg_temp_min_c)} at night.
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+      <p>
+        <Link href={`/explore?month=${month}`}>See the cities with good weather in {name}</Link>
+      </p>
+    </section>
+  );
 }
 
 export default function Home() {
-  const commit = deployedCommit();
-
   return (
-    <div className="page">
-      <main className="content">
-        <h1>Wanderlake</h1>
-        <p className="pitch">
-          Global travel intelligence on a self-built open-source lakehouse, with AI
+    <>
+      <section className="hero">
+        <h1>Plan city trips with open data</h1>
+        <p className="lead">
+          Wanderlake turns open data into simple city guides: today&apos;s weather, the 7-day
+          forecast, the best months to visit, currencies and the official UK travel advice,
+          refreshed every day.
         </p>
-
-        <p className="status">
-          <span className="status-dot" aria-hidden="true" />
-          <span>
-            Status: <strong>Phase 0: foundation</strong>
-          </span>
+        <p>
+          <Link className="button primary" href="/explore">
+            Explore all cities
+          </Link>
         </p>
-
-        <nav className="links" aria-label="Project links">
-          <a className="button primary" href={REPO_URL}>
-            GitHub repository
-          </a>
-          <a className="button" href={README_URL}>
-            Read the README
-          </a>
-        </nav>
-      </main>
-
-      <footer className="footer">
-        Deployed commit:{" "}
-        {commit.href ? (
-          <a href={commit.href}>
-            <code>{commit.label}</code>
-          </a>
-        ) : (
-          <code>{commit.label}</code>
-        )}
-      </footer>
-    </div>
+      </section>
+      <GoodThisMonth />
+    </>
   );
 }

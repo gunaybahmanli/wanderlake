@@ -23,7 +23,7 @@ OpenTofu in [`infra/tofu`](../../infra/tofu):
 | `REST_COUNTRIES_API_KEY` | `rest_countries` DAG (Airflow) | root `.env` | GitHub Actions secret (when a cloud job runs it) |
 | `CLOUD_S3_ACCESS_KEY`, `CLOUD_S3_SECRET_KEY` | publish job: R2 Parquet (`CLOUD_S3_BUCKET`) | root `.env` | GitHub Actions secret (when a cloud job runs it) |
 | `SUPABASE_DB_HOST`, `_PORT`, `_USER`, `_NAME` | publish job: Supabase session pooler (password: `TF_VAR_supabase_db_password`) | root `.env` | GitHub Actions variables (not secrets) |
-| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | website, `make api-check` | root `.env` | Vercel environment variables (public: read-only by RLS) |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | website (server side), `make web-env`, `make api-check` | root `.env` | Vercel environment variables via OpenTofu (key write-only, not in state; read-only by RLS) |
 
 Rules:
 
@@ -271,7 +271,10 @@ first `s3.put`; Supabase is not touched for that table.
 
 The pooler host, port, user and database name are not secrets and do not change on rotation.
 The anon key changes only if the project's API keys are rotated (Project settings > API keys);
-then update `SUPABASE_ANON_KEY` (and the website's environment) and run `make api-check`.
+then update `SUPABASE_ANON_KEY` in `.env`, bump `supabase_anon_key_version` in
+`infra/tofu/variables.tf` (the Vercel value is write-only, so OpenTofu re-sends it only when the
+version changes), run `make tofu-plan` and `make tofu-apply`, redeploy the website, then run
+`make web-env` and `make api-check`.
 
 ### State passphrase
 

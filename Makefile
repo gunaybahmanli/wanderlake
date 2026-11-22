@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 .PHONY: help setup lint format test clean up down ps logs psql s3-ls backfill test-dags \
 	tofu-init tofu-fmt tofu-validate tofu-plan tofu-apply \
-	web-install web-dev web-lint web-build \
+	web-install web-dev web-lint web-build web-test web-env \
 	trino lakehouse-init lakehouse-smoke-test build mode-query mode-ingest mode-full weather-backfill \
 	config-load dbt-deps dbt-build dbt-test dbt-source-freshness dbt-docs dbt-manifest \
 	publish api-check
@@ -26,8 +26,9 @@ REQUIRE_TRINO = @docker inspect -f '{{.State.Health.Status}}' wanderlake-trino-1
 # OpenTofu: load the root .env (credentials + TF_VAR_*) into the environment, then run in infra/tofu.
 TOFU_DIR := infra/tofu
 TOFU_PLAN := wanderlake.tfplan
+# The website's Supabase anon key is passed on from SUPABASE_ANON_KEY, so .env holds it once.
 TOFU = test -f .env || { echo "Missing .env: run 'cp .env.example .env' and fill it in."; exit 1; }; \
-	set -a && . ./.env && set +a && cd $(TOFU_DIR) && tofu
+	set -a && . ./.env && TF_VAR_supabase_anon_key="$${SUPABASE_ANON_KEY:-}" && set +a && cd $(TOFU_DIR) && tofu
 # Compose: PROFILE may list several profiles, e.g. make up PROFILE="core query".
 # COMPOSE_ALL enables every profile, so exec/run/ps/logs/down reach any running service.
 COMPOSE_BASE := docker compose --env-file .env -f infra/compose/compose.yaml
@@ -132,6 +133,13 @@ web-lint: ## Website: run ESLint
 
 web-build: ## Website: production build
 	@cd web && npm run build
+
+web-test: ## Website: run the unit tests (Vitest)
+	@cd web && npm test
+
+web-env: ## Website: write web/.env.local (Supabase URL and anon key) from the root .env, for local dev
+	@test -f .env || { echo "Missing .env: run 'cp .env.example .env' and fill it in."; exit 1; }
+	@./web/scripts/write-env-local.sh
 
 trino: ## Open the Trino CLI on the iceberg catalog (needs PROFILE including query)
 	@$(COMPOSE_ALL) exec trino trino --catalog iceberg

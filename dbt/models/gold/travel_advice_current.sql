@@ -2,6 +2,7 @@
 -- silver.travel_advice (is_current), with the sections the website shows.
 select
   cast(country_code as varchar) as country_code,
+  cast(slug as varchar) as slug,
   cast(title as varchar) as title,
   cast(has_alert as boolean) as has_alert,
   cast(alert_statuses as array(varchar)) as alert_statuses,

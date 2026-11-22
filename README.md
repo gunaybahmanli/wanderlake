@@ -430,21 +430,39 @@ New DAGs start paused: unpause `frankfurter_rates` in the Airflow UI (or `docker
 
 ## Website
 
-The website is a Next.js app (App Router, TypeScript) in [`web/`](web/), deployed on Vercel. The Vercel project itself is managed by OpenTofu in `infra/tofu`.
+The website (https://wanderlake.vercel.app) is a Next.js app (App Router, TypeScript, plain CSS) in [`web/`](web/), deployed on Vercel. The Vercel project and its environment variables are managed by OpenTofu in `infra/tofu`.
 
-Run it locally (Node.js 26):
+| Page | What it shows |
+|---|---|
+| `/` | Short intro and "Good to visit this month": cities ranked by their share of pleasant days in the current month |
+| `/explore` | A card per city (country and flag, today's weather, best months, currency) with filters for region, travel month and currency; filters live in the URL query (`/explore?region=Asia&month=5`), so links can be shared, and the form works without JavaScript |
+| `/cities/<id>` | Facts (country, region, population, time zone, languages, currency, elevation and its source), today's weather, the 7-day forecast, UK travel advice (alert badge, summary, last update, link to GOV.UK) and the best months; marked slots for the currency converter and climate chart (Part B) |
+| `/about` | How the pipeline works, data sources and licences, and when the data was last updated |
+
+Plus `sitemap.xml`, `robots.txt` and per-page titles and descriptions.
+
+**Data flow:** gold tables (lakehouse) -> `publish_cloud` -> Supabase schema `api` (read-only REST API, [ADR-0010](docs/adr/0010-serve-site-from-supabase-rest-with-read-only-rls.md)) -> Next.js on Vercel. The data layer in [`web/lib/data/`](web/lib/data/) reads Supabase **on the server only** (`server-only`; `SUPABASE_URL` and `SUPABASE_ANON_KEY`, not `NEXT_PUBLIC_*`), so the key never reaches browsers.
+
+- **Rendering:** every page is prerendered at build time, including the 10 city pages, and the data behind them is refreshed in the background at most once an hour (incremental static regeneration through `"use cache"` and the `cacheLife` profile `data` in `next.config.ts`). A visit never waits for Supabase; a page is at most about an hour behind a publish.
+- **When Supabase is down:** cached pages keep serving their last good version (up to 7 days); a page with nothing cached shows "Data temporarily unavailable" instead of failing; a build without data fails on purpose, so Vercel keeps the previous deployment.
+- **Fixture mode:** `DATA_SOURCE=fixture` uses a small built-in sample (3 cities, [`web/lib/data/fixtures.ts`](web/lib/data/fixtures.ts)) instead of Supabase. CI builds and tests this way, without secrets.
+
+Run it locally (Node.js 26; the local data stack is not needed, keep it stopped):
 
 ```bash
 make web-install   # npm ci in web/
-make web-dev       # http://localhost:3000
+make web-env       # write web/.env.local (Supabase URL and anon key) from the root .env
+make web-dev       # http://localhost:3000, real data
 make web-lint      # ESLint
-make web-build     # production build
+make web-test      # unit tests (Vitest): data helpers and fixtures
+make web-build     # production build (real data; DATA_SOURCE=fixture to build without Supabase)
 ```
 
 How deploys work:
 
 - **Push or merge to `main`:** production deployment at https://wanderlake.vercel.app.
 - **Pull requests and other branches:** a preview deployment; the Vercel bot posts the link on the PR. Previews require a Vercel login (Standard Protection), production is public.
+- **Environment variables:** `SUPABASE_URL` and `SUPABASE_ANON_KEY` for production and preview come from OpenTofu (`vercel_project_environment_variable`). The key is write-only there: it is sent to Vercel but never stored in OpenTofu state. After rotating it, bump `supabase_anon_key_version` and run `make tofu-plan` / `make tofu-apply`.
 - **Only when `web/` changes:** an ignored build step skips Vercel builds for commits that do not touch `web/`.
 - The footer shows the deployed commit (`VERCEL_GIT_COMMIT_SHA`), or `local` outside Vercel.
 
