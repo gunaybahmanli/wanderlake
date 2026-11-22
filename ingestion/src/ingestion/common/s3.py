@@ -5,6 +5,9 @@ Works with SeaweedFS locally and Cloudflare R2 in the cloud:
     S3_ACCESS_KEY  access key id
     S3_SECRET_KEY  secret access key
     S3_REGION      e.g. us-east-1 (R2 uses "auto"); defaults to us-east-1
+
+The cloud publish job uses the same variables with the CLOUD_ prefix (CLOUD_S3_ENDPOINT, ...),
+so the local S3_* settings for SeaweedFS stay unchanged: s3_client(prefix="CLOUD_S3_").
 """
 
 from __future__ import annotations
@@ -25,19 +28,19 @@ class S3ConfigError(RuntimeError):
     """Raised when required S3_* environment variables are missing."""
 
 
-def s3_client(env: Mapping[str, str] | None = None) -> Any:
-    """Return a boto3 S3 client using path-style addressing."""
+def s3_client(env: Mapping[str, str] | None = None, prefix: str = "S3_") -> Any:
+    """Return a boto3 S3 client using path-style addressing, from <prefix>* variables."""
     env = os.environ if env is None else env
-    missing = [name for name in ("S3_ACCESS_KEY", "S3_SECRET_KEY") if not env.get(name)]
+    missing = [f"{prefix}{n}" for n in ("ACCESS_KEY", "SECRET_KEY") if not env.get(f"{prefix}{n}")]
     if missing:
         raise S3ConfigError(f"missing environment variables: {', '.join(missing)}")
 
     return boto3.client(
         "s3",
-        endpoint_url=env.get("S3_ENDPOINT") or None,
-        aws_access_key_id=env["S3_ACCESS_KEY"],
-        aws_secret_access_key=env["S3_SECRET_KEY"],
-        region_name=env.get("S3_REGION") or "us-east-1",
+        endpoint_url=env.get(f"{prefix}ENDPOINT") or None,
+        aws_access_key_id=env[f"{prefix}ACCESS_KEY"],
+        aws_secret_access_key=env[f"{prefix}SECRET_KEY"],
+        region_name=env.get(f"{prefix}REGION") or "us-east-1",
         config=Config(
             s3={"addressing_style": "path"},
             retries={"max_attempts": 5, "mode": "standard"},

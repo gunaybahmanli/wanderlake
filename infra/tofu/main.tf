@@ -59,3 +59,17 @@ resource "vercel_project_domain" "production" {
   project_id = vercel_project.wanderlake.id
   domain     = var.web_domain
 }
+
+# Supabase REST API (PostgREST): expose schema "api", the read-only gold tables the website
+# reads with the anon key (ADR-0010). Tables, RLS and grants live in supabase/migrations and are
+# applied by the publish job. Only the keys listed here are managed; the rest keep their values.
+# max_rows caps one response; the website pages through larger tables.
+resource "supabase_settings" "wanderlake" {
+  project_ref = supabase_project.wanderlake.id
+
+  api = jsonencode({
+    db_schema            = "public,graphql_public,api"
+    db_extra_search_path = "public, extensions"
+    max_rows             = 1000
+  })
+}

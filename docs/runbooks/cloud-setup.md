@@ -21,6 +21,9 @@ OpenTofu in [`infra/tofu`](../../infra/tofu):
 | `TF_VAR_state_passphrase` | OpenTofu state encryption | root `.env` **and your password manager** | GitHub Actions secret |
 | `VERCEL_API_TOKEN` | Vercel provider | root `.env` | GitHub Actions secret |
 | `REST_COUNTRIES_API_KEY` | `rest_countries` DAG (Airflow) | root `.env` | GitHub Actions secret (when a cloud job runs it) |
+| `CLOUD_S3_ACCESS_KEY`, `CLOUD_S3_SECRET_KEY` | publish job: R2 Parquet (`CLOUD_S3_BUCKET`) | root `.env` | GitHub Actions secret (when a cloud job runs it) |
+| `SUPABASE_DB_HOST`, `_PORT`, `_USER`, `_NAME` | publish job: Supabase session pooler (password: `TF_VAR_supabase_db_password`) | root `.env` | GitHub Actions variables (not secrets) |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | website, `make api-check` | root `.env` | Vercel environment variables (public: read-only by RLS) |
 
 Rules:
 
@@ -45,9 +48,29 @@ Rules:
 4. Store it as `CLOUDFLARE_API_TOKEN`.
 
 This is a user API token (verified with `GET /client/v4/user/tokens/verify`). It can manage R2
-buckets but cannot read or write objects through the S3 API. Applications get separate
-**R2 S3 access keys** (access key ID + secret) in a later step; they map to the generic
-`S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` and `S3_REGION=auto` variables.
+buckets but cannot read or write objects through the S3 API. The publish job uses a separate
+**R2 publish token** (below).
+
+### Cloudflare R2 publish token (S3 credentials for the publish job)
+
+The publish job (`publish_cloud`, `make publish`) writes Parquet to the bucket through R2's
+S3 API. It gets its own credentials, limited to that bucket and to objects:
+
+1. Dashboard: **R2 Object Storage > Manage API tokens > Create API token** (an *Account* token,
+   so it keeps working if your user changes; a *User* token is fine for a personal project).
+2. Permissions: **Object Read & Write** (not Admin: it cannot create or delete buckets or change
+   their settings).
+3. Specify bucket(s): **Apply to specific buckets only > `wanderlake-lake`**.
+4. TTL: an expiry date (recommended: 90 days; note it in the expiry log). Client IP filtering:
+   none (the laptop's IP changes).
+5. Create, then copy the **Access Key ID** and **Secret Access Key** (shown once; the S3
+   credentials, not the token value) into `CLOUD_S3_ACCESS_KEY` and `CLOUD_S3_SECRET_KEY`.
+   `CLOUD_S3_BUCKET=wanderlake-lake`.
+
+The endpoint is not a secret and is not in `.env`: compose builds
+`https://<TF_VAR_cloudflare_account_id>.r2.cloudflarestorage.com` (also `tofu output
+r2_s3_endpoint`), with region `auto` and path-style addressing. The local `S3_*` variables
+stay for SeaweedFS; nothing in the publish job reads them.
 
 ### Supabase
 
@@ -66,6 +89,32 @@ rotate it as described below.
 
 5. Generate a database password (at least 12 characters, letters, digits and symbols, but none
    of `$ \` \ " '`) and store it as `TF_VAR_supabase_db_password`.
+
+### Supabase database connection (publish job) and REST API
+
+The publish job connects to Postgres through Supabase's **session pooler** (Supavisor):
+dashboard **Connect > Session pooler**.
+
+| Variable | Value |
+|---|---|
+| `SUPABASE_DB_HOST` | `aws-0-eu-central-1.pooler.supabase.com` (the host shown there) |
+| `SUPABASE_DB_PORT` | `5432` (session mode; `6543` is transaction mode) |
+| `SUPABASE_DB_USER` | `postgres.<project ref>` (the pooler routes on the ref) |
+| `SUPABASE_DB_NAME` | `postgres` |
+| password | `TF_VAR_supabase_db_password` (compose passes it as `SUPABASE_DB_PASSWORD`) |
+
+- **Why the session pooler:** the direct host (`db.<ref>.supabase.co`) is IPv6-only on the
+  free plan, which Docker on WSL does not route by default. Session mode gives the client one
+  server connection for its whole session, which the job needs for temporary tables and `COPY`;
+  transaction mode (port 6543) would not keep them.
+- TLS is required (`sslmode=require`). The job writes as `postgres`, because it also applies
+  the migrations in `supabase/migrations/` (ADR-0010 lists a dedicated role as a follow-up).
+- **REST API:** `supabase_settings.wanderlake` (OpenTofu) exposes the schema `api` to PostgREST
+  (`db_schema = public,graphql_public,api`). `SUPABASE_URL` (`https://<ref>.supabase.co`) and
+  `SUPABASE_ANON_KEY` (Project settings > API keys, the `anon` / publishable key) are what the
+  website uses. The anon key is public by design; RLS and grants make it read-only, and
+  `make api-check` proves it. The `service_role` / secret key bypasses RLS: never put it in
+  `.env`, the website or CI.
 
 ### Vercel
 
@@ -103,6 +152,7 @@ Update this table whenever a token is created or rotated.
 | `SUPABASE_ACCESS_TOKEN` | YYYY-MM-DD | YYYY-MM-DD (created + 90 days) | |
 | `VERCEL_API_TOKEN` | YYYY-MM-DD | YYYY-MM-DD (created + 90 days) | |
 | `REST_COUNTRIES_API_KEY` | 2026-11-19 | see the API Keys page (revoke there) | |
+| R2 publish token (`CLOUD_S3_*`) | YYYY-MM-DD | YYYY-MM-DD (TTL set at creation) | |
 
 ## OpenTofu state and its encryption
 
@@ -197,12 +247,31 @@ Deployments keep working during rotation: they come from the GitHub app, not the
 3. Trigger `rest_countries` once and check that both tasks succeed.
 4. Revoke the old key. Update the expiry log.
 
-### Supabase database password
+### R2 publish token (before its TTL ends)
+
+1. Create a new R2 API token exactly as above (Object Read & Write, bucket `wanderlake-lake`
+   only, new TTL).
+2. Replace `CLOUD_S3_ACCESS_KEY` and `CLOUD_S3_SECRET_KEY` in `.env`, then recreate Airflow so
+   it sees them (`make mode-full`, or `make mode-ingest`).
+3. Run `make publish`: every table must show `ok yes`.
+4. Delete the old token under R2 > Manage API tokens. Update the expiry log.
+
+An expired or revoked token fails the publish with `AccessDenied` / `InvalidAccessKeyId` on the
+first `s3.put`; Supabase is not touched for that table.
+
+### Supabase database password (also the publish job's pooler password)
 
 1. Reset it in the Supabase dashboard (Project settings > Database), using the rules above.
-2. Put the same value in `TF_VAR_supabase_db_password` in `.env`.
-3. Run `make tofu-plan` and check what it proposes for `database_password` before applying.
-4. Update every client that connects with it (later: API, GitHub secrets).
+   The pooler accepts the new password within a minute or two.
+2. Put the same value in `TF_VAR_supabase_db_password` in `.env`, then recreate Airflow
+   (`make mode-full` or `make mode-ingest`), which passes it as `SUPABASE_DB_PASSWORD`.
+3. Run `make publish` (must end with every table `ok yes`), then `make tofu-plan` and check what
+   it proposes for `database_password` before applying.
+4. Update every other client that connects with it (later: GitHub secrets).
+
+The pooler host, port, user and database name are not secrets and do not change on rotation.
+The anon key changes only if the project's API keys are rotated (Project settings > API keys);
+then update `SUPABASE_ANON_KEY` (and the website's environment) and run `make api-check`.
 
 ### State passphrase
 

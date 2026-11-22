@@ -25,6 +25,8 @@ dev = [
     "pyarrow==25.0.1",
     "sqlalchemy==2.0.55",
     "defusedxml==0.7.1",
+    # Supabase writes (ingestion.publish); psycopg 3.3.6 ships in apache/airflow:3.4.0
+    "psycopg[binary]==3.3.6",
     # Test doubles (no internet or real S3 needed)
     "requests-mock",
     "moto[s3]",

@@ -115,6 +115,35 @@ class TestWanderlakeTransform:
         assert "models.city_overview.run" in ids and "models.city_overview.test" in ids
 
 
+class TestPublishCloud:
+    """Runs after every transform (gold asset), migrations first, one task per table, verify."""
+
+    DAG_ID = "publish_cloud"
+
+    def test_scheduled_only_by_the_gold_asset(self, dagbag: DagBag) -> None:
+        from wanderlake_assets import GOLD
+
+        dag = dagbag.dags[self.DAG_ID]
+        # Compared by name: the class lives in the SDK or core module depending on the version.
+        assert type(dag.timetable).__name__ == "AssetTriggeredTimetable"
+        assert {a.uri for a in dag.timetable.asset_condition.objects} == {GOLD.uri}
+        transform = dagbag.dags[TestWanderlakeTransform.DAG_ID]
+        assert any(GOLD.uri in {o.uri for o in (t.outlets or [])} for t in transform.tasks)
+
+    def test_rules(self, dagbag: DagBag) -> None:
+        dag = dagbag.dags[self.DAG_ID]
+        assert set(dag.tags) == {"publish", "cloud"}
+        assert dag.default_args["owner"] == "wanderlake"
+        assert dag.default_args["retries"] == 2
+        assert dag.doc_md
+
+    def test_order(self, dagbag: DagBag) -> None:
+        dag = dagbag.dags[self.DAG_ID]
+        ids = [task.task_id for task in dag.topological_sort()]
+        assert ids == ["apply_migrations", "publish_table", "verify_counts"]
+        assert dag.get_task("verify_counts").outlets[0].uri == "supabase://wanderlake/api"
+
+
 def test_gate_skips_only_a_fallback_run_after_a_recent_build() -> None:
     from datetime import UTC, datetime, timedelta
 

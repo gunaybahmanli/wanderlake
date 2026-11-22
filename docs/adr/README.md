@@ -14,6 +14,7 @@ and the consequences.
 | [0007](0007-custom-airflow-image.md) | Custom Airflow image with dbt in a separate virtualenv | Accepted | 2026-11-19 |
 | [0008](0008-unified-exchange-rates.md) | Unified exchange rates: ECB primary, CBAR for missing currencies, EUR base | Accepted | 2026-11-20 |
 | [0009](0009-orchestrate-dbt-with-cosmos-and-assets.md) | Orchestrate dbt with Cosmos and asset-based scheduling | Accepted | 2026-11-22 |
+| [0010](0010-serve-site-from-supabase-rest-with-read-only-rls.md) | Serve the public site from Supabase's REST API with read-only RLS (no custom backend) | Accepted | 2026-11-22 |
 
 ## Adding an ADR
 
