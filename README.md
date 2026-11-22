@@ -436,16 +436,20 @@ The website (https://wanderlake.vercel.app) is a Next.js app (App Router, TypeSc
 |---|---|
 | `/` | Short intro and "Good to visit this month": cities ranked by their share of pleasant days in the current month |
 | `/explore` | A card per city (country and flag, today's weather, best months, currency) with filters for region, travel month and currency; filters live in the URL query (`/explore?region=Asia&month=5`), so links can be shared, and the form works without JavaScript |
-| `/cities/<id>` | Facts (country, region, population, time zone, languages, currency, elevation and its source), today's weather, the 7-day forecast, UK travel advice (alert badge, summary, last update, link to GOV.UK) and the best months; marked slots for the currency converter and climate chart (Part B) |
+| `/cities/<id>` | Facts (country, region, population, time zone, languages, currency, elevation and its source), today's weather, the 7-day forecast, the best months, a climate chart, a currency converter, and UK travel advice (alert badge, summary, last update, link to GOV.UK) |
 | `/about` | How the pipeline works, data sources and licences, and when the data was last updated |
 
 Plus `sitemap.xml`, `robots.txt` and per-page titles and descriptions.
+
+- **Currency converter** (client component): from AZN to the city's currency by default (AZN to USD for Baku), with a swap button, every available currency, and a validated amount. It shows the result, the rate, the date of the rate and its source (ECB, or CBAR for AZN). The server page passes the latest rows of `fct_exchange_rate` (the conversion matrix of the newest date) to the browser as plain numbers: no API call or key in the browser.
+- **Climate chart:** a hand-built SVG rendered on the server (no chart library, no JavaScript): average high and low temperature per month as lines and rainy days as bars, with the best months highlighted. A compact layout replaces the wide one on small screens, and the same numbers are available as a table ("Show the data as a table"). Colours meet 3:1 contrast in the light and dark themes.
 
 **Data flow:** gold tables (lakehouse) -> `publish_cloud` -> Supabase schema `api` (read-only REST API, [ADR-0010](docs/adr/0010-serve-site-from-supabase-rest-with-read-only-rls.md)) -> Next.js on Vercel. The data layer in [`web/lib/data/`](web/lib/data/) reads Supabase **on the server only** (`server-only`; `SUPABASE_URL` and `SUPABASE_ANON_KEY`, not `NEXT_PUBLIC_*`), so the key never reaches browsers.
 
 - **Rendering:** every page is prerendered at build time, including the 10 city pages, and the data behind them is refreshed in the background at most once an hour (incremental static regeneration through `"use cache"` and the `cacheLife` profile `data` in `next.config.ts`). A visit never waits for Supabase; a page is at most about an hour behind a publish.
 - **When Supabase is down:** cached pages keep serving their last good version (up to 7 days); a page with nothing cached shows "Data temporarily unavailable" instead of failing; a build without data fails on purpose, so Vercel keeps the previous deployment.
 - **Fixture mode:** `DATA_SOURCE=fixture` uses a small built-in sample (3 cities, [`web/lib/data/fixtures.ts`](web/lib/data/fixtures.ts)) instead of Supabase. CI builds and tests this way, without secrets.
+- **Tests:** Vitest unit tests for the data helpers, the conversion math (including AZN pairs and inverse consistency) and the chart scales; Playwright end-to-end tests ([`web/e2e/`](web/e2e/)) for the home page, the explore filters, the converter, the climate chart and the 404 page, run by the CI job "Web e2e" against a fixture build (Chromium only, browsers cached).
 
 Run it locally (Node.js 26; the local data stack is not needed, keep it stopped):
 
@@ -455,6 +459,7 @@ make web-env       # write web/.env.local (Supabase URL and anon key) from the r
 make web-dev       # http://localhost:3000, real data
 make web-lint      # ESLint
 make web-test      # unit tests (Vitest): data helpers and fixtures
+make web-e2e       # optional: end-to-end tests (Playwright, Chromium) on a fixture build, in the official Playwright image
 make web-build     # production build (real data; DATA_SOURCE=fixture to build without Supabase)
 ```
 

@@ -39,8 +39,29 @@ async function select<T>(table: string, columns: string): Promise<T[]> {
   return (data ?? []) as T[];
 }
 
+const RATE_COLUMNS =
+  "date,from_currency,to_currency,rate,from_rate_date,to_rate_date,source_from,source_to";
+
+/** The conversion matrix of the newest date in api.fct_exchange_rate (about 56 rows). */
+async function latestRates(): Promise<SiteData["rates"]> {
+  const fail = (error: { message: string }) =>
+    new DataUnavailableError(`Supabase api.fct_exchange_rate: ${error.message}`, { cause: error });
+  const db = client();
+  const newest = await db
+    .from("fct_exchange_rate")
+    .select("date")
+    .order("date", { ascending: false })
+    .limit(1);
+  if (newest.error) throw fail(newest.error);
+  const date = (newest.data?.[0] as { date?: string } | undefined)?.date;
+  if (!date) return [];
+  const { data, error } = await db.from("fct_exchange_rate").select(RATE_COLUMNS).eq("date", date);
+  if (error) throw fail(error);
+  return (data ?? []) as SiteData["rates"];
+}
+
 export async function loadFromSupabase(): Promise<SiteData> {
-  const [cities, details, climate, forecasts, advice] = await Promise.all([
+  const [cities, details, climate, forecasts, advice, rates] = await Promise.all([
     select<SiteData["cities"][number]>("city_overview", "*"),
     select<SiteData["details"][number]>(
       "dim_city",
@@ -58,9 +79,10 @@ export async function loadFromSupabase(): Promise<SiteData> {
       "travel_advice_current",
       "country_code,slug,title,has_alert,alert_statuses,public_updated_at,change_description,summary_text,safety_text,entry_requirements_text,health_text",
     ),
+    latestRates(),
   ]);
   if (cities.length === 0) {
     throw new DataUnavailableError("Supabase api.city_overview returned no rows.");
   }
-  return { cities, details, climate, forecasts, advice };
+  return { cities, details, climate, forecasts, advice, rates };
 }

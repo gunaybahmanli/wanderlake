@@ -86,6 +86,21 @@ export type TravelAdvice = {
   health_text: string | null;
 };
 
+/**
+ * api.fct_exchange_rate, latest date only: the conversion matrix, one row per ordered pair of
+ * different currencies. Convert with amount * rate (units of to_currency per from_currency).
+ */
+export type ExchangeRate = {
+  date: string;
+  from_currency: string;
+  to_currency: string;
+  rate: number;
+  from_rate_date: string; // rate date actually used for from_currency (<= date)
+  to_rate_date: string;
+  source_from: string | null; // "ecb" or "cbar"
+  source_to: string | null;
+};
+
 /** Everything the website reads, loaded once per cache period (the tables are small). */
 export type SiteData = {
   cities: CityOverview[];
@@ -93,4 +108,5 @@ export type SiteData = {
   climate: ClimateMonth[];
   forecasts: ForecastDay[];
   advice: TravelAdvice[];
+  rates: ExchangeRate[]; // latest date only
 };
