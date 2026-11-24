@@ -93,12 +93,29 @@ def test_migrations_create_every_published_table_like_its_dbt_contract() -> None
 
 
 def test_rls_migration_covers_every_published_table() -> None:
-    sql = (MIGRATIONS_DIR / "20261122100100_api_read_only_access.sql").read_text()
-    listed = re.findall(r"'(\w+)'", sql.split("array[", 1)[1].split("]", 1)[0])
-    assert sorted(listed) == sorted(TABLE_NAMES)
-    assert "for select to anon using (true)" in sql
-    assert "grant select on table api.%I to anon" in sql
-    assert not re.search(r"grant (insert|update|delete|all)", sql)
+    """Every published table gets RLS, a SELECT-only anon policy and a SELECT-only grant: in the
+    loop of the first access migration, or with explicit statements in a later one."""
+    all_sql = "\n".join(m.sql for m in migrations.discover(MIGRATIONS_DIR))
+    loop_sql = (MIGRATIONS_DIR / "20261122100100_api_read_only_access.sql").read_text()
+    in_loop = set(re.findall(r"'(\w+)'", loop_sql.split("array[", 1)[1].split("]", 1)[0]))
+    assert "for select to anon using (true)" in loop_sql
+    assert "grant select on table api.%I to anon" in loop_sql
+
+    def explicit(table: str) -> bool:
+        return all(
+            statement in all_sql
+            for statement in (
+                f"alter table api.{table} enable row level security;",
+                f"revoke all on table api.{table} from public, anon, authenticated;",
+                f"grant select on table api.{table} to anon;",
+                f"create policy anon_read on api.{table} as permissive for select to anon "
+                "using (true);",
+            )
+        )
+
+    uncovered = [t for t in TABLE_NAMES if t not in in_loop and not explicit(t)]
+    assert not uncovered, f"published tables without read-only RLS and grants: {uncovered}"
+    assert not re.search(r"grant (insert|update|delete|truncate|all)", all_sql)
 
 
 def test_migrations_are_found_in_version_order() -> None:

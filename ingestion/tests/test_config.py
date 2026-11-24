@@ -31,6 +31,7 @@ VALID_CITY = {
     "rate_source": "ecb",
     "inside_airbnb": True,
     "geonames_id": 3169070,
+    "wikidata_id": "Q220",
 }
 
 
@@ -183,4 +184,53 @@ def test_invalid_geonames_id_is_rejected(tmp_path: Path, value: object) -> None:
     path = write_cities(tmp_path, city(geonames_id=value))
 
     with pytest.raises(CityConfigError, match=r"\(rome\)\.geonames_id"):
+        load_cities(path)
+
+
+# --- wikidata_id and cover_image_file ------------------------------------------------------------
+
+
+def test_real_file_wikidata_ids() -> None:
+    by_id = {c.id: c.wikidata_id for c in load_cities()}
+    # Reviewed by hand: Baku and Madrid use the main items, not the GeoNames (P1566) matches.
+    assert by_id["baku"] == "Q9248"
+    assert by_id["madrid"] == "Q2807"
+    assert len(set(by_id.values())) == len(by_id)
+    overrides = {c.id: c.cover_image_file for c in load_cities() if c.cover_image_file}
+    assert overrides == {"baku": "Baku Boulevard 2024.jpg"}  # reviewed choice, see cities.yaml
+
+
+def test_duplicate_wikidata_id_is_rejected(tmp_path: Path) -> None:
+    path = write_cities(tmp_path, city(), city(id="rome-2", geonames_id=1))
+    with pytest.raises(CityConfigError, match=r"duplicate wikidata_id\(s\): Q220"):
+        load_cities(path)
+
+
+@pytest.mark.parametrize("value", ["220", "q220", "Q0", "Q22a", "P1566", 220])
+def test_invalid_wikidata_id_is_rejected(tmp_path: Path, value: object) -> None:
+    path = write_cities(tmp_path, city(wikidata_id=value))
+    with pytest.raises(CityConfigError, match=r"\(rome\)\.wikidata_id"):
+        load_cities(path)
+
+
+def test_wikidata_id_is_required(tmp_path: Path) -> None:
+    data = city()
+    del data["wikidata_id"]
+    with pytest.raises(CityConfigError, match="wikidata_id"):
+        load_cities(write_cities(tmp_path, data))
+
+
+def test_cover_image_file_is_optional_and_validated(tmp_path: Path) -> None:
+    [rome] = load_cities(write_cities(tmp_path, city()))
+    assert rome.cover_image_file is None
+    path = write_cities(tmp_path, city(cover_image_file="Rome Skyline (8012016319).jpg"))
+    assert load_cities(path)[0].cover_image_file == "Rome Skyline (8012016319).jpg"
+
+
+@pytest.mark.parametrize(
+    "value", ["File:Rome.jpg", "Rome", "https://upload.wikimedia.org/x/Rome.jpg", "Rome.pdf", ""]
+)
+def test_invalid_cover_image_file_is_rejected(tmp_path: Path, value: str) -> None:
+    path = write_cities(tmp_path, city(cover_image_file=value))
+    with pytest.raises(CityConfigError, match=r"\(rome\)\.cover_image_file"):
         load_cities(path)

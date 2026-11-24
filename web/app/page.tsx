@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { CityImage } from "@/components/CityImage";
+import { CityCover } from "@/components/CityCover";
 import { DataUnavailable } from "@/components/DataUnavailable";
 import { Flag } from "@/components/Flag";
 import { getGoodThisMonth, loadOrUnavailable } from "@/lib/data";
@@ -9,7 +9,7 @@ import { formatShare, formatTemp, monthName } from "@/lib/data/helpers";
 async function GoodThisMonth() {
   const result = await loadOrUnavailable(getGoodThisMonth);
   if (!result.ok) return <DataUnavailable />;
-  const { month, ranked } = result.data;
+  const { month, ranked, images } = result.data;
   const name = monthName(month);
 
   return (
@@ -28,7 +28,7 @@ async function GoodThisMonth() {
               <span className="ranking-pos" aria-hidden="true">
                 {i + 1}
               </span>
-              <CityImage name={city.name} size="card" />
+              <CityCover name={city.name} image={images[city.city_id] ?? null} />
               <div className="ranking-body">
                 <h3>
                   <Link href={`/cities/${city.city_id}`} prefetch={true}>

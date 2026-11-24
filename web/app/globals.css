@@ -429,7 +429,8 @@ section.card {
   background: var(--surface);
 }
 
-.ranking-item .city-image {
+.ranking-item .city-image,
+.ranking-item .city-cover {
   display: none;
 }
 
@@ -451,6 +452,14 @@ section.card {
   .ranking-item .city-image {
     display: flex;
     height: 5rem;
+    border-radius: 0.5rem;
+  }
+
+  .ranking-item .city-cover {
+    display: block;
+  }
+
+  .ranking-item .city-cover img {
     border-radius: 0.5rem;
   }
 }
@@ -921,4 +930,50 @@ section.card {
 
 .chart-table .row-best th {
   font-weight: 700;
+}
+
+/* City cover photos (Wikimedia Commons) with their credit line */
+
+.city-cover {
+  margin: 0;
+}
+
+.city-cover img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+  background: linear-gradient(135deg, var(--placeholder-a), var(--placeholder-b));
+}
+
+.city-cover-card img {
+  aspect-ratio: 16 / 9;
+}
+
+.city-cover-hero {
+  margin-bottom: 1rem;
+}
+
+.city-cover-hero img {
+  aspect-ratio: 21 / 9;
+  max-height: 24rem;
+  border-radius: var(--radius);
+}
+
+.photo-credit {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.city-card .photo-credit {
+  padding: 0 1rem;
+}
+
+/* Credit links stay clickable above the card's full-size link overlay (.card-link::after). */
+.photo-credit a {
+  position: relative;
+  z-index: 1;
+  color: inherit;
 }

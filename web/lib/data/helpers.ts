@@ -3,6 +3,7 @@
 import type {
   CityDetails,
   CityOverview,
+  CityImage,
   ClimateMonth,
   ExchangeRate,
   ForecastDay,
@@ -270,6 +271,7 @@ export type CityPageData = {
   advice: TravelAdvice | null;
   climate: ClimateMonth[];
   rates: ExchangeRate[]; // latest conversion matrix, for the converter
+  image: CityImage | null; // cover photo, or null for the placeholder
 };
 
 /** Everything one city page shows, or null for an unknown city id. */
@@ -285,6 +287,7 @@ export function cityPageData(data: SiteData, cityId: string): CityPageData | nul
       .filter((c) => c.city_id === cityId)
       .sort((a, b) => a.month - b.month),
     rates: data.rates,
+    image: imageFor(data.images, cityId),
   };
 }
 
@@ -292,4 +295,14 @@ export function cityPageData(data: SiteData, cityId: string): CityPageData | nul
 export function lastUpdated(cities: CityOverview[]): string | null {
   const times = cities.map((c) => c._built_at).filter((t): t is string => !!t);
   return times.length ? times.reduce((a, b) => (Date.parse(a) >= Date.parse(b) ? a : b)) : null;
+}
+
+/** The city's cover image, or null (the page then shows the placeholder). */
+export function imageFor(images: CityImage[], cityId: string): CityImage | null {
+  return images.find((i) => i.city_id === cityId && !!i.thumb_url) ?? null;
+}
+
+/** Map of city_id to cover image, for lists of cities. */
+export function imagesByCity(images: CityImage[]): Record<string, CityImage> {
+  return Object.fromEntries(images.filter((i) => !!i.thumb_url).map((i) => [i.city_id, i]));
 }

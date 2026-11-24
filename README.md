@@ -235,6 +235,7 @@ Gold is shaped for its consumers: dimensions describe places, facts hold measure
 | `gold.city_overview` | serving | configured city | city fields, rates to EUR, USD and AZN today, today's forecast, current travel advice alert, `best_months` |
 | `gold.weather_forecast_latest` | serving | `city_id`, `forecast_date` | 7-day forecast from each city's latest run, with `weather_description` |
 | `gold.travel_advice_current` | serving | country with FCDO advice | current version: `has_alert`, `alert_statuses`, `public_updated_at`, `change_description` and the summary, safety, entry requirements and health texts |
+| `gold.city_images` | serving | configured city | cover photo from Wikimedia Commons: thumbnail URL and size, author, licence (name, family, link), Commons file page; only open licences ([ADR-0011](docs/adr/0011-city-images-from-wikimedia-commons-via-wikidata.md)) |
 
 - **Conversion matrix and as-of rule:** `fct_exchange_rate` covers the city currencies plus EUR, USD and AZN, every ordered pair of different currencies, for every calendar day from the first rate date to today. Each day uses each currency's latest rate on or before that day (rates are not published on weekends and holidays), so `from_rate_date` and `to_rate_date` can be older than `date`; `source_from` and `source_to` say whether ECB or CBAR supplied each side. `rate` is the number of `to_currency` units per 1 `from_currency`, computed through the EUR base. The day spine is Trino's `sequence()`.
 - **Incremental weather:** `fct_weather_daily` merges on (`city_id`, `weather_date`) and reprocesses the last 7 days on each run (Open-Meteo revises recent days); a `--full-refresh` rebuilds the full history.
@@ -288,7 +289,8 @@ The Airflow container mounts `config/` read-only at `/opt/wanderlake/config`, so
 | `open_meteo` | daily 05:00 | [Open-Meteo](https://open-meteo.com) forecast (7 days) and archive (last 7 days); CC BY 4.0 | raw `s3://raw/open_meteo/{forecast,history}/...`, then bronze `iceberg.bronze.open_meteo_forecast` and `iceberg.bronze.open_meteo_history` |
 | `fcdo_advice` | daily 06:00 | [GOV.UK](https://www.gov.uk/foreign-travel-advice) FCDO foreign travel advice (OGL v3.0) | raw `s3://raw/fcdo/advice/snapshot_date=YYYY-MM-DD/<country_code>.json`, then bronze `iceberg.bronze.fcdo_advice` |
 | `config_cities` | daily 00:30, and on demand | `config/cities.yaml` (this repo) | `iceberg.bronze.config_cities` (full replace; no raw copy, the file is in git) |
-| `wanderlake_transform` | when the daily bronze assets are updated, or 18:00 fallback | the bronze tables above | dbt silver and gold (Cosmos), then the `gold` asset |
+| `wikimedia_city_images` | weekly, Mon 02:00 | [Wikidata](https://www.wikidata.org) (CC0) and [Wikimedia Commons](https://commons.wikimedia.org) (each image under its own open licence) | raw `s3://raw/wikimedia/{wikidata,commons}/snapshot_date=YYYY-MM-DD/<city_id>.json`, then bronze `iceberg.bronze.wikimedia_city_images` |
+| `wanderlake_transform` | when the daily bronze assets are updated, or the weekly city images, or 18:00 fallback | the bronze tables above | dbt silver and gold (Cosmos), then the `gold` asset |
 | `publish_cloud` | when the `gold` asset is updated (no clock time) | the gold tables | Supabase schema `api` (read-only REST API) and R2 Parquet; see [Cloud publish](#cloud-publish) |
 
 ### Daily flow
@@ -301,6 +303,7 @@ Every load task above declares its bronze table as an Airflow **Asset** (`iceber
 16:30  frankfurter_rates - load_bronze -> bronze.frankfurter_rates --+-- all four updated --> wanderlake_transform
 16:30  cbar_rates ------- load_bronze -> bronze.cbar_rates ---------+   (or 18:00 UTC fallback)       |
                                                                                                      v
+Mon 02:00 wikimedia_city_images - load_bronze -> bronze.wikimedia_city_images --- or on its own -->|
        rest_countries, geonames_cities, fcdo_advice, config_cities: assets too, never block      gold asset
                                                                                                      |
                                                      Supabase api (REST) + R2 Parquet <-- publish_cloud
@@ -317,7 +320,7 @@ Every load task above declares its bronze table as an Airflow **Asset** (`iceber
 
 | Table | Supabase `api.<table>` | R2 (`wanderlake-lake`) |
 |---|---|---|
-| `dim_city`, `dim_country`, `city_overview`, `fct_weather_daily`, `agg_city_climate_monthly`, `weather_forecast_latest`, `travel_advice_current` | full table | `gold/<table>/snapshot_date=YYYY-MM-DD/data.parquet` and `gold/<table>/latest/data.parquet` |
+| `dim_city`, `dim_country`, `city_overview`, `fct_weather_daily`, `agg_city_climate_monthly`, `weather_forecast_latest`, `travel_advice_current`, `city_images` | full table | `gold/<table>/snapshot_date=YYYY-MM-DD/data.parquet` and `gold/<table>/latest/data.parquet` |
 | `fct_exchange_rate` | last 400 days | same layout, last 400 days |
 
 - **Tasks:** `apply_migrations` (new SQL files in [`supabase/migrations/`](supabase/migrations/): schema `api`, tables, RLS, grants) >> `publish_table` (one mapped task per table) >> `verify_counts`.
@@ -414,6 +417,17 @@ A daily snapshot of the UK Foreign, Commonwealth & Development Office travel adv
 - **Raw:** each country response unchanged, plus the index used for the mapping (`_index.json`).
 - **Bronze** (`iceberg.bronze.fcdo_advice`, partitioned by year): one row per country and `snapshot_date` with `slug`, `title`, `public_updated_at`, `change_description`, `alert_status_json` (e.g. `["avoid_all_but_essential_travel_to_parts"]`) and `parts_json` (the sections with their **HTML body unchanged**). Cleaning the HTML to text happens in silver; summaries come in phase 2.
 
+### `wikimedia_city_images` (city cover photos)
+
+A weekly cover photo per configured city from Wikimedia Commons, chosen through Wikidata ([ADR-0011](docs/adr/0011-city-images-from-wikimedia-commons-via-wikidata.md)).
+
+- **Which image:** each city's reviewed `wikidata_id` in `config/cities.yaml` (found through its GeoNames ID, Wikidata property P1566; Baku and Madrid use the main items, see the comments there). The item's main images (P18) are tried preferred rank first, then normal, and the **first one with an allowed licence** is used. An optional `cover_image_file` in the config replaces the choice for a city.
+- **Licences:** only CC0, public domain, CC BY and CC BY-SA. A city without an allowed image keeps its first candidate with `license_family = other`, so the dbt tests on `gold.city_images` fail and name it.
+- **Raw:** the Wikidata P18 claims (`wbgetclaims`) and the Commons `imageinfo` response (file page, original and 1280 px thumbnail URLs and sizes, licence, artist, credit), unchanged.
+- **Bronze** (`iceberg.bronze.wikimedia_city_images`): one row per city and `snapshot_date`: the selected file, how it was selected, the candidates considered, and the metadata (HTML kept; cleaned in silver).
+- **Etiquette:** a descriptive User-Agent with the repository URL, one request at a time with a 1 s pause, `maxlag=5` on Wikidata, retries with backoff: about 20 requests a week.
+- **Downstream:** its asset triggers `wanderlake_transform` on its own (OR with the daily inputs), then `publish_cloud` publishes `api.city_images`.
+
 Run and inspect it:
 
 ```bash
@@ -442,6 +456,7 @@ The website (https://wanderlake.vercel.app) is a Next.js app (App Router, TypeSc
 Plus `sitemap.xml`, `robots.txt` and per-page titles and descriptions.
 
 - **Currency converter** (client component): from AZN to the city's currency by default (AZN to USD for Baku), with a swap button, every available currency, and a validated amount. It shows the result, the rate, the date of the rate and its source (ECB, or CBAR for AZN). The server page passes the latest rows of `fct_exchange_rate` (the conversion matrix of the newest date) to the browser as plain numbers: no API call or key in the browser.
+- **City photos:** city cards (home, explore) and the city page header show the city's photo from `api.city_images`. `next/image` reserves the space and picks the right size, but the browser loads Wikimedia's own thumbnails (330, 500, 960 or 1280 px wide) directly through a custom loader that accepts only `upload.wikimedia.org/wikipedia/commons/` URLs: the server-side optimiser fetched as `node` and Wikimedia answered with 429 ([ADR-0011](docs/adr/0011-city-images-from-wikimedia-commons-via-wikidata.md)). Copies in our own storage with full optimisation are planned for phase 2, when galleries arrive. Credits are always shown: author, licence (linked) and "via Wikimedia Commons" (linked to the file page). Without a photo, the neutral placeholder is shown.
 - **Climate chart:** a hand-built SVG rendered on the server (no chart library, no JavaScript): average high and low temperature per month as lines and rainy days as bars, with the best months highlighted. A compact layout replaces the wide one on small screens, and the same numbers are available as a table ("Show the data as a table"). Colours meet 3:1 contrast in the light and dark themes.
 
 **Data flow:** gold tables (lakehouse) -> `publish_cloud` -> Supabase schema `api` (read-only REST API, [ADR-0010](docs/adr/0010-serve-site-from-supabase-rest-with-read-only-rls.md)) -> Next.js on Vercel. The data layer in [`web/lib/data/`](web/lib/data/) reads Supabase **on the server only** (`server-only`; `SUPABASE_URL` and `SUPABASE_ANON_KEY`, not `NEXT_PUBLIC_*`), so the key never reaches browsers.

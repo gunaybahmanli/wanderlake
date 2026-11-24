@@ -85,15 +85,24 @@ class TestWanderlakeTransform:
         assert isinstance(timetable, AssetOrTimeSchedule)
         assert "0 18 * * *" in timetable.summary
 
-    def test_daily_inputs_trigger_it(self, dagbag: DagBag) -> None:
-        from wanderlake_assets import DAILY_TRANSFORM_INPUTS
+    def test_inputs_trigger_it(self, dagbag: DagBag) -> None:
+        """(all four daily inputs) OR the weekly city images."""
+        from wanderlake_assets import DAILY_TRANSFORM_INPUTS, STANDALONE_TRANSFORM_INPUTS
 
-        dag = dagbag.dags[self.DAG_ID]
-        uris = {asset.uri for _, asset in dag.timetable.asset_condition.iter_assets()}
-        assert uris == {asset.uri for asset in DAILY_TRANSFORM_INPUTS}
+        def kind(obj: object) -> str:  # DagBag may hold serialized classes (SerializedAssetAny)
+            return type(obj).__name__.removeprefix("Serialized")
+
+        condition = dagbag.dags[self.DAG_ID].timetable.asset_condition
+        uris = {asset.uri for _, asset in condition.iter_assets()}
+        assert uris == {a.uri for a in DAILY_TRANSFORM_INPUTS + STANDALONE_TRANSFORM_INPUTS}
+        assert kind(condition) == "AssetAny"
+        [all_daily] = [o for o in condition.objects if kind(o) == "AssetAll"]
+        assert {a.uri for a in all_daily.objects} == {a.uri for a in DAILY_TRANSFORM_INPUTS}
+        standalone = {o.uri for o in condition.objects if kind(o) == "Asset"}
+        assert standalone == {a.uri for a in STANDALONE_TRANSFORM_INPUTS}
 
     def test_every_input_has_a_producer(self, dagbag: DagBag) -> None:
-        from wanderlake_assets import DAILY_TRANSFORM_INPUTS
+        from wanderlake_assets import DAILY_TRANSFORM_INPUTS, STANDALONE_TRANSFORM_INPUTS
 
         produced = {
             outlet.uri
@@ -101,7 +110,8 @@ class TestWanderlakeTransform:
             for task in dag.tasks
             for outlet in (task.outlets or [])
         }
-        missing = {asset.uri for asset in DAILY_TRANSFORM_INPUTS} - produced
+        inputs = DAILY_TRANSFORM_INPUTS + STANDALONE_TRANSFORM_INPUTS
+        missing = {asset.uri for asset in inputs} - produced
         assert not missing, f"no task declares these assets as outlets: {missing}"
 
     def test_order_and_tasks(self, dagbag: DagBag) -> None:

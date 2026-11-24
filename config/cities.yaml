@@ -16,6 +16,12 @@
 #   geonames_id    GeoNames geonameid of the city (cities15000 dump). Matched by country, name and
 #                  closest distance, preferring PPLC/PPLA/PPL (ingestion.sources.geonames.match_city).
 #                  Dubai's GeoNames point is about 21 km from our centre; it is the right place.
+#   wikidata_id    Wikidata item of the city, unique. Found through the GeoNames ID (Wikidata
+#                  property P1566) and reviewed by hand; the cover image is the item's main image
+#                  (P18, preferred rank first) with an open licence (ingestion.sources.wikimedia).
+#   cover_image_file  optional: a Wikimedia Commons file name (without "File:") that replaces the
+#                  image chosen from Wikidata. It must pass the same licence allow-list and
+#                  attribution checks.
 #
 # Verified on 2026-11-18 (UTC): rate_source against the ECB daily reference rates of 2026-11-18
 # (AZN and AED are not included; CBAR publishes AED), inside_airbnb against the
@@ -32,6 +38,11 @@ cities:
     rate_source: cbar
     inside_airbnb: false
     geonames_id: 587084
+    # GeoNames 587084 matches only Q31900267, a bare item without an image; Q9248 is Baku.
+    wikidata_id: Q9248
+    # The item's main image (P18) is portrait; this landscape view of the Flame Towers from the
+    # Boulevard was chosen on 2026-11-24 (CC BY-SA 4.0, Rufatazizzade).
+    cover_image_file: Baku Boulevard 2024.jpg
 
   - id: madrid
     name: Madrid
@@ -43,6 +54,8 @@ cities:
     rate_source: ecb
     inside_airbnb: true
     geonames_id: 3117735
+    # GeoNames 3117735 matches Q116170766 ("Madrid city", no image); Q2807 is Madrid.
+    wikidata_id: Q2807
 
   - id: tokyo
     name: Tokyo
@@ -54,6 +67,7 @@ cities:
     rate_source: ecb
     inside_airbnb: true
     geonames_id: 1850147
+    wikidata_id: Q1490
 
   - id: bangkok
     name: Bangkok
@@ -65,6 +79,7 @@ cities:
     rate_source: ecb
     inside_airbnb: true
     geonames_id: 1609350
+    wikidata_id: Q1861
 
   - id: rome
     name: Rome
@@ -76,6 +91,7 @@ cities:
     rate_source: ecb
     inside_airbnb: true
     geonames_id: 3169070
+    wikidata_id: Q220
 
   - id: amsterdam
     name: Amsterdam
@@ -87,6 +103,7 @@ cities:
     rate_source: ecb
     inside_airbnb: true
     geonames_id: 2759794
+    wikidata_id: Q727
 
   - id: dubai
     name: Dubai
@@ -98,6 +115,7 @@ cities:
     rate_source: cbar
     inside_airbnb: false
     geonames_id: 292223
+    wikidata_id: Q612
 
   - id: new-york-city
     name: New York City
@@ -109,6 +127,7 @@ cities:
     rate_source: ecb
     inside_airbnb: true
     geonames_id: 5128581
+    wikidata_id: Q60
 
   - id: prague
     name: Prague
@@ -120,6 +139,7 @@ cities:
     rate_source: ecb
     inside_airbnb: true
     geonames_id: 3067696
+    wikidata_id: Q1085
 
   - id: seoul
     name: Seoul
@@ -131,3 +151,4 @@ cities:
     rate_source: ecb
     inside_airbnb: false
     geonames_id: 1835848
+    wikidata_id: Q8684

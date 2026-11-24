@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { CityImage } from "@/components/CityImage";
+import { CityCover } from "@/components/CityCover";
 import { ClimateChart } from "@/components/ClimateChart";
 import { CurrencyConverter } from "@/components/CurrencyConverter";
 import { DataUnavailable } from "@/components/DataUnavailable";
@@ -297,7 +297,7 @@ function CityContent({ page }: { page: CityPageData }) {
         <Link href="/explore">All cities</Link>
       </p>
       <header className="city-header">
-        <CityImage name={city.name} size="hero" />
+        <CityCover name={city.name} image={page.image} size="hero" preload />
         <h1>{city.name}</h1>
         <p className="lead with-flag">
           <Flag src={city.flag_png_url} country={city.country_name} />

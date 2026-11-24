@@ -1,15 +1,23 @@
 import Link from "next/link";
 
 import { formatShare, formatTemp } from "@/lib/data/helpers";
-import type { CityOverview } from "@/lib/data/types";
+import type { CityImage, CityOverview } from "@/lib/data/types";
 
-import { CityImage } from "./CityImage";
+import { CityCover } from "./CityCover";
 import { Flag } from "./Flag";
 
-export function CityCard({ city, pleasantShare }: { city: CityOverview; pleasantShare?: number }) {
+export function CityCard({
+  city,
+  image,
+  pleasantShare,
+}: {
+  city: CityOverview;
+  image: CityImage | null;
+  pleasantShare?: number;
+}) {
   return (
     <article className="card city-card">
-      <CityImage name={city.name} />
+      <CityCover name={city.name} image={image} />
       <div className="card-body">
         <h3 className="card-title">
           <Link href={`/cities/${city.city_id}`} prefetch={true} className="card-link">

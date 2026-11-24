@@ -48,6 +48,15 @@ Slug = Annotated[
 ]
 CountryCode = Annotated[str, _matches(r"[A-Z]{2}", "2 uppercase letters (ISO 3166-1 alpha-2)")]
 CurrencyCode = Annotated[str, _matches(r"[A-Z]{3}", "3 uppercase letters (ISO 4217)")]
+WikidataId = Annotated[str, _matches(r"Q[1-9][0-9]*", "a Wikidata item id, e.g. Q220")]
+# A Commons file name without the "File:" prefix, e.g. "Rome Skyline (8012016319).jpg".
+CommonsFile = Annotated[
+    str,
+    _matches(
+        r"(?i)(?!file:)[^/|#<>\[\]{}\n]+\.(jpe?g|png|webp|tiff?|gif)",
+        'a Wikimedia Commons image file name without "File:" (e.g. Rome Skyline.jpg)',
+    ),
+]
 
 
 class CityConfigError(ValueError):
@@ -67,6 +76,8 @@ class City(BaseModel):
     rate_source: Literal["ecb", "cbar"]
     inside_airbnb: bool | None
     geonames_id: Annotated[int, Field(gt=0)]
+    wikidata_id: WikidataId
+    cover_image_file: CommonsFile | None = None
 
     @field_validator("timezone")
     @classmethod
@@ -97,6 +108,10 @@ class CityConfig(BaseModel):
         dup_gids = sorted({g for g in gids if gids.count(g) > 1})
         if dup_gids:
             raise ValueError(f"duplicate geonames_id(s): {', '.join(map(str, dup_gids))}")
+        qids = [c.wikidata_id for c in self.cities]
+        dup_qids = sorted({q for q in qids if qids.count(q) > 1})
+        if dup_qids:
+            raise ValueError(f"duplicate wikidata_id(s): {', '.join(dup_qids)}")
         return self
 
 

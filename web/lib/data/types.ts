@@ -101,6 +101,23 @@ export type ExchangeRate = {
   source_to: string | null;
 };
 
+/**
+ * api.city_images: one cover image per city from Wikimedia Commons (via Wikidata). Every display
+ * must show the credit: artist, licence (linked) and "via Wikimedia Commons" (file page).
+ */
+export type CityImage = {
+  city_id: string;
+  file_name: string;
+  file_page_url: string;
+  thumb_url: string; // about 1280 px wide
+  thumb_width: number;
+  thumb_height: number;
+  artist: string;
+  license_short_name: string;
+  license_family: string; // cc0 | public-domain | cc-by | cc-by-sa
+  license_url: string | null;
+};
+
 /** Everything the website reads, loaded once per cache period (the tables are small). */
 export type SiteData = {
   cities: CityOverview[];
@@ -109,4 +126,5 @@ export type SiteData = {
   forecasts: ForecastDay[];
   advice: TravelAdvice[];
   rates: ExchangeRate[]; // latest date only
+  images: CityImage[];
 };

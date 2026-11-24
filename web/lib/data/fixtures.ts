@@ -3,6 +3,7 @@
 import type {
   CityDetails,
   CityOverview,
+  CityImage,
   ClimateMonth,
   ExchangeRate,
   ForecastDay,
@@ -158,4 +159,31 @@ const rates: ExchangeRate[] = Object.keys(EUR_PER_UNIT).flatMap((from) =>
     })),
 );
 
-export const fixtureData: SiteData = { cities, details, climate, forecasts, advice, rates };
+// Cover images: Tokyo has one (real Commons metadata), Baku and Madrid have none, so the
+// placeholder path stays covered by the tests.
+const images: CityImage[] = [
+  {
+    city_id: "tokyo",
+    file_name: "Skyscrapers of Shinjuku 2009 January (revised).jpg",
+    file_page_url:
+      "https://commons.wikimedia.org/wiki/File:Skyscrapers_of_Shinjuku_2009_January_(revised).jpg",
+    thumb_url:
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Skyscrapers_of_Shinjuku_2009_January_%28revised%29.jpg/1280px-Skyscrapers_of_Shinjuku_2009_January_%28revised%29.jpg",
+    thumb_width: 1280,
+    thumb_height: 699,
+    artist: "Morio",
+    license_short_name: "CC BY-SA 3.0",
+    license_family: "cc-by-sa",
+    license_url: "https://creativecommons.org/licenses/by-sa/3.0",
+  },
+];
+
+export const fixtureData: SiteData = {
+  cities,
+  details,
+  climate,
+  forecasts,
+  advice,
+  rates,
+  images,
+};

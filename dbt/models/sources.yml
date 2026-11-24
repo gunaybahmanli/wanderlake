@@ -147,3 +147,23 @@ sources:
             description: 'JSON list of sections {slug, title, body} with the HTML body as received.'
           - name: _loaded_at
             description: When the bronze row was written.
+
+      - name: wikimedia_city_images
+        description: >
+          Weekly snapshots of one cover image per configured city from Wikimedia Commons, chosen
+          through Wikidata (DAG wikimedia_city_images): the selected file with its licence,
+          artist and credit metadata as received (HTML). Each image has its own licence.
+        freshness:
+          warn_after: {count: 9, period: day}
+          error_after: {count: 16, period: day}
+        columns:
+          - name: snapshot_date
+            description: Date of the weekly snapshot.
+          - name: city_id
+            description: City slug (config/cities.yaml).
+          - name: file_name
+            description: Commons file name without "File:" (null when the item has no image).
+          - name: license_family
+            description: cc0, public-domain, cc-by, cc-by-sa, or other (not allowed).
+          - name: _loaded_at
+            description: When the bronze row was written.

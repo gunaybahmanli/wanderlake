@@ -12,6 +12,8 @@ import {
   formatElevation,
   formatPopulation,
   govUkAdviceUrl,
+  imageFor,
+  imagesByCity,
   lastUpdated,
   monthName,
   parseExploreFilters,
@@ -155,5 +157,19 @@ describe("fixture data", () => {
       expect(forecasts.filter((f) => f.city_id === city.city_id)).toHaveLength(7);
       expect(advice.some((a) => a.country_code === city.country_code)).toBe(true);
     }
+  });
+});
+
+describe("city images", () => {
+  it("finds a city's cover image, or null for the placeholder", () => {
+    expect(imageFor(fixtureData.images, "tokyo")?.license_short_name).toBe("CC BY-SA 3.0");
+    expect(imageFor(fixtureData.images, "baku")).toBeNull();
+    expect(cityPageData(fixtureData, "tokyo")?.image?.artist).toBe("Morio");
+    expect(cityPageData(fixtureData, "madrid")?.image).toBeNull();
+  });
+
+  it("maps images by city and skips rows without a thumbnail", () => {
+    const map = imagesByCity([...fixtureData.images, { ...fixtureData.images[0], city_id: "x", thumb_url: "" }]);
+    expect(Object.keys(map)).toEqual(["tokyo"]);
   });
 });

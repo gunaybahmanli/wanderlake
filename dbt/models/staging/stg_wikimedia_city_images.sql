@@ -1,0 +1,26 @@
+-- Wikimedia city images: every weekly snapshot, one row per (snapshot_date, city_id).
+select
+  snapshot_date,
+  city_id,
+  wikidata_id,
+  file_name,
+  selection,
+  candidates_json,
+  file_page_url,
+  original_url,
+  original_width,
+  original_height,
+  thumb_url,
+  thumb_width,
+  thumb_height,
+  mime,
+  license_short_name,
+  license_code,
+  license_url,
+  license_family,
+  artist_html,
+  credit_html,
+  attribution_required,
+  usage_terms,
+  _loaded_at
+from {{ source('bronze', 'wikimedia_city_images') }}

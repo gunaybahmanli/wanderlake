@@ -9,7 +9,8 @@ export function SiteFooter() {
       <div className="container footer-inner">
         <p>
           Data from REST Countries, GeoNames, Open-Meteo, ECB (via Frankfurter), CBAR and the UK
-          FCDO. <Link href="/about#sources">Sources and attribution</Link>.
+          FCDO; photos from Wikimedia Commons.{" "}
+          <Link href="/about#sources">Sources and attribution</Link>.
         </p>
         <p>
           <a href={REPO_URL}>GitHub</a>

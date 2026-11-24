@@ -47,6 +47,7 @@ TABLES: tuple[PublishedTable, ...] = (
     PublishedTable("agg_city_climate_monthly"),
     PublishedTable("weather_forecast_latest"),
     PublishedTable("travel_advice_current"),
+    PublishedTable("city_images"),
 )
 TABLE_NAMES: tuple[str, ...] = tuple(t.name for t in TABLES)
 

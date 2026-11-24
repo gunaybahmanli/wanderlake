@@ -44,6 +44,19 @@ const SOURCES = [
     licence: "Official rates published by CBAR",
   },
   {
+    name: "Wikimedia Commons",
+    href: "https://commons.wikimedia.org",
+    what: "City photos. Each photo has its own author and open licence (CC0, public domain, CC BY or CC BY-SA), credited next to it with a link to its file page. Photos load directly from Wikimedia Commons' servers, so your browser connects to Wikimedia to show them.",
+    licence: "the licence shown with each photo",
+  },
+  {
+    name: "Wikidata",
+    href: "https://www.wikidata.org",
+    what: "Which photo represents each city (the item's main image).",
+    licence: "Creative Commons CC0",
+    licenceHref: "https://creativecommons.org/publicdomain/zero/1.0/",
+  },
+  {
     name: "UK Foreign, Commonwealth & Development Office travel advice (GOV.UK)",
     href: "https://www.gov.uk/foreign-travel-advice",
     what: "Travel advice and alerts per country.",
@@ -76,8 +89,8 @@ export default function AboutPage() {
         <ol className="steps">
           <li>
             <strong>Collect.</strong> Every day, scheduled jobs download exchange rates, weather,
-            travel advice and reference data from the sources below, and keep an untouched copy
-            of every download.
+            travel advice and reference data from the sources below (city photos weekly), and
+            keep an untouched copy of every download.
           </li>
           <li>
             <strong>Store.</strong> The data lands in a small lakehouse: open table files on
@@ -118,6 +131,8 @@ export default function AboutPage() {
         </ul>
         <p className="small">
           Contains public sector information licensed under the Open Government Licence v3.0.
+          City photos are not covered by this site&apos;s code licence: reuse them under their own
+          licence, with the credit shown.
           Travel advice is summarised; always check the official advice before you travel.
           Climate figures are averages over recent years, not forecasts.
         </p>
