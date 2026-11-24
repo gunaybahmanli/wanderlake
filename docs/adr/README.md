@@ -12,11 +12,11 @@ and the consequences.
 | [0005](0005-use-opentofu.md) | Use OpenTofu for infrastructure as code | Accepted | 2026-11-18 |
 | [0006](0006-accept-unsigned-opentofu-providers.md) | Accept unsigned OpenTofu providers (Supabase, Vercel) | Accepted | 2026-11-18 |
 | [0007](0007-custom-airflow-image.md) | Custom Airflow image with dbt in a separate virtualenv | Accepted | 2026-11-19 |
-| [0008](0008-unified-exchange-rates.md) | Unified exchange rates: ECB primary, CBAR for missing currencies, EUR base | Accepted | 2026-11-20 |
+| [0008](0008-unified-exchange-rates.md) | Unified exchange rates: ECB primary, CBAR for missing currencies, EUR base; direct CBAR rates for AZN pairs | Accepted | 2026-11-20 |
 | [0009](0009-orchestrate-dbt-with-cosmos-and-assets.md) | Orchestrate dbt with Cosmos and asset-based scheduling | Accepted | 2026-11-22 |
 | [0010](0010-serve-site-from-supabase-rest-with-read-only-rls.md) | Serve the public site from Supabase's REST API with read-only RLS (no custom backend) | Accepted | 2026-11-22 |
 | [0011](0011-city-images-from-wikimedia-commons-via-wikidata.md) | City images from Wikimedia Commons via Wikidata | Accepted | 2026-11-24 |
-| [0012](0012-dev-on-laptop-prod-on-github-actions-single-writer.md) | Dev on the laptop, prod on GitHub Actions, single writer to production | Proposed | 2026-11-24 |
+| [0012](0012-dev-on-laptop-prod-on-github-actions-single-writer.md) | Dev on the laptop, prod on GitHub Actions, single writer to production | Accepted | 2026-11-24 |
 
 ## Adding an ADR
 

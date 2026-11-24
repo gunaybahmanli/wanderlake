@@ -143,6 +143,11 @@ const EUR_PER_UNIT: Record<string, number> = {
   USD: 0.910746812386, // ECB: 1.098 USD per EUR
 };
 const RATE_SOURCE: Record<string, string> = { AZN: "cbar", EUR: "ecb", JPY: "ecb", USD: "ecb" };
+// Pairs with AZN and one of these are direct CBAR rates (ADR-0008): both sides "cbar". JPY stays a
+// cross rate here (as THB does in production) so the fixtures also cover a mixed-source pair.
+const CBAR_DIRECT = new Set(["EUR", "USD"]);
+const direct = (a: string, b: string) =>
+  (a === "AZN" && CBAR_DIRECT.has(b)) || (b === "AZN" && CBAR_DIRECT.has(a));
 
 const rates: ExchangeRate[] = Object.keys(EUR_PER_UNIT).flatMap((from) =>
   Object.keys(EUR_PER_UNIT)
@@ -152,10 +157,10 @@ const rates: ExchangeRate[] = Object.keys(EUR_PER_UNIT).flatMap((from) =>
       from_currency: from,
       to_currency: to,
       rate: EUR_PER_UNIT[from] / EUR_PER_UNIT[to],
-      from_rate_date: from === "EUR" ? RUN_DATE : "2026-11-20",
-      to_rate_date: to === "EUR" ? RUN_DATE : "2026-11-20",
-      source_from: RATE_SOURCE[from],
-      source_to: RATE_SOURCE[to],
+      from_rate_date: from === "EUR" && !direct(from, to) ? RUN_DATE : "2026-11-20",
+      to_rate_date: to === "EUR" && !direct(from, to) ? RUN_DATE : "2026-11-20",
+      source_from: direct(from, to) ? "cbar" : RATE_SOURCE[from],
+      source_to: direct(from, to) ? "cbar" : RATE_SOURCE[to],
     })),
 );
 

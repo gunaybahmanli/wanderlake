@@ -67,7 +67,9 @@ models:
       Daily conversion matrix for the currencies of interest (all configured city currencies
       plus EUR, USD and AZN): one row per calendar date and ordered currency pair, identical
       pairs excluded. As-of rule: each date uses, per currency, the latest rate on or before it
-      (weekends and holidays reuse the last business day). Convert: amount * rate.
+      (weekends and holidays reuse the last business day). Pairs with AZN use CBAR's direct
+      rate when CBAR publishes the other currency (so AZN/USD is the official 1.70); other pairs
+      are cross rates through the EUR base (ADR-0008). Convert: amount * rate.
     config:
       contract: {enforced: true}
     data_tests:
@@ -86,7 +88,7 @@ models:
               arguments: {expression: "> 0"}
       - {name: from_rate_date, data_type: date, description: Rate date actually used for from_currency (<= date)., data_tests: [not_null]}
       - {name: to_rate_date, data_type: date, description: Rate date actually used for to_currency (<= date)., data_tests: [not_null]}
-      - {name: source_from, data_type: varchar, description: Source of the from_currency rate (ecb or cbar).}
+      - {name: source_from, data_type: varchar, description: Source of the from_currency rate (ecb or cbar; both cbar for a direct CBAR AZN pair).}
       - {name: source_to, data_type: varchar, description: Source of the to_currency rate (ecb or cbar).}
       - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built.}
 
