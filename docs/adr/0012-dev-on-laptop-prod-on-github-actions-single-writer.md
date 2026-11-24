@@ -87,6 +87,7 @@ set from the local `.env` by `make prod-github-env` without printing them.
   `maxlag`): the runner backs off, defers or retries only temporary errors, and a rerun is safe.
 - The publisher connects as the Supabase project's database owner, as the laptop did.
   Follow-up: a dedicated publisher role limited to `api`, `ops` and the migration table.
-- Testing a change to the prod workflow before merge needs a temporary branch policy on the
-  `production` environment (see the runbook); it is removed afterwards.
+- Production is published only from `main`, after merge: feature branches never get the
+  `production` environment. Changes are tested on the branch as a dry run on the laptop, and a
+  change that depends on prod's history is checked in the first `main` run (see the runbook).
 - Runbook: [`docs/runbooks/prod-pipeline.md`](../runbooks/prod-pipeline.md).

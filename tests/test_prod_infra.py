@@ -56,6 +56,17 @@ def test_workflow_transforms_and_publishes_in_the_right_order() -> None:
     assert finish["env"]["STEPS_JSON"] == "${{ toJSON(steps) }}"
 
 
+def test_production_environment_is_limited_to_main() -> None:
+    # Production is published only from main, after merge (runbook, "Changes that affect
+    # production"): the setup script cannot be told to allow another branch.
+    script = (ROOT / "infra/prod/github-environment.sh").read_text()
+    assert re.search(r"^BRANCHES=main\b", script, re.MULTILINE)
+    assert "${BRANCHES" not in script
+    assert "BRANCHES" not in (ROOT / "Makefile").read_text()
+    job = next(iter(workflow()["jobs"].values()))
+    assert job["environment"] in ("production", {"name": "production"})
+
+
 def test_workflow_actions_are_pinned_to_commits() -> None:
     uses = re.findall(r"uses:\s*(\S+)", WORKFLOW.read_text())
     assert uses

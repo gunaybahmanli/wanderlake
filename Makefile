@@ -7,7 +7,6 @@
 	publish api-check prod-catalog-init prod-github-env
 
 PROFILE ?= core
-BRANCHES ?= main
 SERVICE ?=
 BUCKET ?= raw
 DAG ?=
@@ -206,9 +205,9 @@ prod-catalog-init: ## Prod: Iceberg catalog role, schema and tables in Supabase 
 	@set -a && . ./.env && SUPABASE_DB_PASSWORD="$${TF_VAR_supabase_db_password:-}" && set +a \
 		&& bash infra/prod/catalog-init.sh
 
-prod-github-env: ## Prod: GitHub Environment "production" and its secrets from .env (BRANCHES="main ...")
+prod-github-env: ## Prod: GitHub Environment "production" (main only) and its secrets from .env
 	@test -f .env || { echo "Missing .env"; exit 1; }
-	@set -a && . ./.env && set +a && BRANCHES="$(BRANCHES)" bash infra/prod/github-environment.sh
+	@set -a && . ./.env && set +a && bash infra/prod/github-environment.sh
 
 publish: ## Cloud: publish gold to Supabase (api) and R2 Parquet, then verify row counts (needs Airflow)
 	@docker inspect -f '{{.State.Health.Status}}' wanderlake-airflow-1 2>/dev/null | grep -q healthy \

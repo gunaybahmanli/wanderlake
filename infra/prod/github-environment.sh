@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # GitHub Environment "production" for .github/workflows/prod-pipeline.yml (ADR-0012): creates the
-# environment, limits it to the listed branches, and sets its secrets from .env.
-# Run with: make prod-github-env [BRANCHES="main feat/x"]   (default: main only)
+# environment, limits it to the main branch only, and sets its secrets from .env.
+# Run with: make prod-github-env
+# Production is published only from main, after merge; feature branches are never allowed
+# (docs/runbooks/prod-pipeline.md, "Changes that affect production").
 #
 # Secret values go to gh on stdin, never as arguments, and are never printed. Settings that are
 # not secret (bucket names, catalog name, region...) live in the workflow file instead.
@@ -9,7 +11,7 @@ set -euo pipefail
 
 REPO="${GITHUB_REPOSITORY:-gunaybahmanli/wanderlake}"
 ENVIRONMENT=production
-BRANCHES="${BRANCHES:-main}"
+BRANCHES=main  # fixed on purpose: never add a feature branch
 POLICIES="repos/$REPO/environments/$ENVIRONMENT/deployment-branch-policies"
 
 # Secret name in GitHub = value from .env (the prod pipeline reads the generic names).
@@ -35,7 +37,7 @@ gh api --method PUT "repos/$REPO/environments/$ENVIRONMENT" --silent --input - <
 {"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
 JSON
 
-# Branch policies: add the wanted branches, then drop policies for branches no longer listed.
+# Branch policies: add main, then drop any other branch policy.
 existing="$(gh api "$POLICIES" --jq '.branch_policies[] | "\(.id) \(.name)"')"
 for branch in $BRANCHES; do
     if ! grep -qx "[0-9]* $branch" <<<"$existing"; then
