@@ -60,8 +60,19 @@ async function latestRates(): Promise<SiteData["rates"]> {
   return (data ?? []) as SiteData["rates"];
 }
 
+/** api.last_updated: one row, moved by the prod pipeline after a verified publish. Optional: a
+ * missing row (or table) falls back to the newest _built_at, so it never takes the site down. */
+async function publishedAt(): Promise<string | null> {
+  const { data, error } = await client().from("last_updated").select("published_at").limit(1);
+  if (error) {
+    console.error(`Supabase api.last_updated: ${error.message}`);
+    return null;
+  }
+  return (data?.[0] as { published_at?: string } | undefined)?.published_at ?? null;
+}
+
 export async function loadFromSupabase(): Promise<SiteData> {
-  const [cities, details, climate, forecasts, advice, rates, images] = await Promise.all([
+  const [cities, details, climate, forecasts, advice, rates, images, published] = await Promise.all([
     select<SiteData["cities"][number]>("city_overview", "*"),
     select<SiteData["details"][number]>(
       "dim_city",
@@ -84,9 +95,10 @@ export async function loadFromSupabase(): Promise<SiteData> {
       "city_images",
       "city_id,file_name,file_page_url,thumb_url,thumb_width,thumb_height,artist,license_short_name,license_family,license_url",
     ),
+    publishedAt(),
   ]);
   if (cities.length === 0) {
     throw new DataUnavailableError("Supabase api.city_overview returned no rows.");
   }
-  return { cities, details, climate, forecasts, advice, rates, images };
+  return { cities, details, climate, forecasts, advice, rates, images, publishedAt: published };
 }

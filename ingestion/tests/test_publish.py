@@ -84,9 +84,14 @@ def gold_contracts() -> dict[str, dict[str, str]]:
     return {m["name"]: {c["name"]: c["data_type"] for c in m["columns"]} for m in models}
 
 
+# Tables in schema api that are not gold tables: run metadata the site reads (ADR-0012).
+API_METADATA_TABLES = {"last_updated"}
+
+
 def test_migrations_create_every_published_table_like_its_dbt_contract() -> None:
     api, gold = api_tables_in_migrations(), gold_contracts()
-    assert sorted(api) == sorted(TABLE_NAMES)
+    assert set(api) - API_METADATA_TABLES == set(TABLE_NAMES)
+    api = {t: c for t, c in api.items() if t not in API_METADATA_TABLES}
     for table, columns in api.items():
         expected = {col: TYPE_MAP[dbt_type] for col, dbt_type in gold[table].items()}
         assert columns == expected, f"api.{table} differs from the dbt contract of gold.{table}"
@@ -113,7 +118,9 @@ def test_rls_migration_covers_every_published_table() -> None:
             )
         )
 
-    uncovered = [t for t in TABLE_NAMES if t not in in_loop and not explicit(t)]
+    uncovered = [
+        t for t in (*TABLE_NAMES, *API_METADATA_TABLES) if t not in in_loop and not explicit(t)
+    ]
     assert not uncovered, f"published tables without read-only RLS and grants: {uncovered}"
     assert not re.search(r"grant (insert|update|delete|truncate|all)", all_sql)
 
@@ -316,3 +323,71 @@ def test_counts_table_marks_mismatches() -> None:
     lines = text.splitlines()
     assert lines[0].split() == ["table", "source", "supabase", "r2_snapshot", "r2_latest", "ok"]
     assert lines[1].split()[-1] == "yes" and lines[2].split()[-1] == "NO"
+
+
+def test_ops_schema_is_private_and_never_granted() -> None:
+    sql = (MIGRATIONS_DIR / "20261125100000_ops_pipeline_runs.sql").read_text()
+    assert "revoke all on schema ops from public, anon, authenticated;" in sql
+    assert "revoke all on table ops.pipeline_runs from public, anon, authenticated;" in sql
+    assert not re.search(r"grant [^;]* on [^;]*ops\.", sql)
+
+
+# --- single writer ------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("env", "allow_flag", "expected"),
+    [
+        ({"WANDERLAKE_ENV": "prod"}, False, True),
+        ({}, False, False),  # dev is the default
+        ({"WANDERLAKE_ENV": "dev"}, False, False),
+        ({"WANDERLAKE_ENV": "dev"}, True, True),
+        ({"WANDERLAKE_ENV": "dev", "WANDERLAKE_ALLOW_DEV_PUBLISH": "1"}, False, True),
+        ({"WANDERLAKE_ENV": "dev", "WANDERLAKE_ALLOW_DEV_PUBLISH": "yes"}, False, False),
+    ],
+)
+def test_only_prod_writes_unless_explicitly_overridden(
+    env: dict, allow_flag: bool, expected: bool
+) -> None:
+    assert job.should_write(allow_flag, env) is expected
+
+
+def test_dry_run_reads_gold_and_names_the_targets(gold_catalog: SqlCatalog) -> None:
+    result = job.dry_run_table(get_table("dim_city"), date(2026, 11, 22), BUCKET, gold_catalog)
+    assert result.source_rows == 2
+    assert result.targets == [
+        "api.dim_city",
+        f"s3://{BUCKET}/gold/dim_city/snapshot_date=2026-11-22/data.parquet",
+        f"s3://{BUCKET}/gold/dim_city/latest/data.parquet",
+    ]
+    assert "DRY RUN: nothing was written" in job.format_dry_run([result])
+
+
+def test_publish_cli_in_dev_is_a_dry_run_and_never_connects(
+    monkeypatch: pytest.MonkeyPatch, gold_catalog: SqlCatalog, capsys: pytest.CaptureFixture
+) -> None:
+    from ingestion.publish import __main__ as cli
+
+    monkeypatch.setenv("WANDERLAKE_ENV", "dev")
+    monkeypatch.delenv("WANDERLAKE_ALLOW_DEV_PUBLISH", raising=False)
+    monkeypatch.setenv("CLOUD_S3_BUCKET", BUCKET)
+
+    def forbidden(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("a dry run must not connect to Supabase or R2")
+
+    monkeypatch.setattr(supabase, "connect", forbidden)
+    monkeypatch.setattr(r2, "client", forbidden)
+    original = job.read_gold
+    monkeypatch.setattr(job, "read_gold", lambda t, d, c=None: original(t, d, gold_catalog))
+
+    cli.main(["--table", "dim_city", "--date", "2026-11-22"])
+
+    out = capsys.readouterr().out
+    assert "DRY RUN" in out and "dim_city: 2 rows -> api.dim_city" in out
+
+
+def test_markdown_counts_has_one_row_per_table() -> None:
+    counts = [job.TableCounts("dim_city", 10, 10, 10, 10), job.TableCounts("x", 2, 1, 2, 2)]
+    text = job.markdown_counts(counts, date(2026, 11, 24))
+    assert "| dim_city | 10 | 10 | 10 | 10 | ✅ |" in text
+    assert "| x | 2 | 1 | 2 | 2 | ❌ |" in text

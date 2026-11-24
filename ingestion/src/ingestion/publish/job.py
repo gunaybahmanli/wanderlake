@@ -5,17 +5,24 @@ Trino needed), write the Parquet snapshot and latest files to R2, then replace a
 Supabase in one transaction. verify() then compares, for every table, the source row count
 with Supabase count(*) and the row counts of both Parquet files read back from R2, and raises
 if any differ.
+
+Single writer (ADR-0012): only prod (WANDERLAKE_ENV=prod, the GitHub Actions pipeline) writes
+to Supabase and R2. Elsewhere should_write() is False and callers do a dry run (dry_run_table:
+read gold, report what would be written, write nothing), unless explicitly overridden with
+--allow-dev-publish or WANDERLAKE_ALLOW_DEV_PUBLISH=1.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import os
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from typing import Any
 
 import pyarrow as pa
 
+from ingestion.common.env import wanderlake_env
 from ingestion.common.iceberg import get_catalog
 from ingestion.common.logging import get_logger, log_event
 from ingestion.publish import r2, supabase
@@ -24,8 +31,28 @@ from ingestion.publish.tables import PublishedTable
 log = get_logger(__name__)
 
 
+ALLOW_DEV_PUBLISH = "WANDERLAKE_ALLOW_DEV_PUBLISH"
+
+
 class VerificationError(RuntimeError):
     """Raised when a published copy does not have the source's row count."""
+
+
+def should_write(allow_dev: bool = False, env: Mapping[str, str] | None = None) -> bool:
+    """True in prod. In dev only when explicitly overridden: the flag, or
+    WANDERLAKE_ALLOW_DEV_PUBLISH=1."""
+    env = os.environ if env is None else env
+    if wanderlake_env(env) == "prod":
+        return True
+    return allow_dev or env.get(ALLOW_DEV_PUBLISH, "").strip() == "1"
+
+
+@dataclass(frozen=True)
+class DryRunResult:
+    table: str
+    snapshot_date: str
+    source_rows: int
+    targets: list[str]  # where a real publish would write
 
 
 @dataclass(frozen=True)
@@ -113,6 +140,43 @@ def publish_table(
     )
     log_event(log, "publish.table_done", **{k: v for k, v in asdict(result).items()})
     return result
+
+
+def dry_run_table(
+    table: PublishedTable, snapshot_date: date, bucket_name: str, catalog: Any | None = None
+) -> DryRunResult:
+    """Read gold and report what a publish would write. Connects to neither Supabase nor R2."""
+    arrow_table = read_gold(table, snapshot_date, catalog)
+    targets = [
+        f"{supabase.SCHEMA}.{table.name}",
+        f"s3://{bucket_name}/{r2.snapshot_key(table.name, snapshot_date)}",
+        f"s3://{bucket_name}/{r2.latest_key(table.name)}",
+    ]
+    result = DryRunResult(table.name, snapshot_date.isoformat(), arrow_table.num_rows, targets)
+    log_event(log, "publish.dry_run", table=table.name, rows=arrow_table.num_rows, targets=targets)
+    return result
+
+
+def format_dry_run(results: list[DryRunResult]) -> str:
+    lines = ["DRY RUN: nothing was written (single writer: only WANDERLAKE_ENV=prod publishes)."]
+    for r in results:
+        lines.append(f"  {r.table}: {r.source_rows} rows -> {', '.join(r.targets)}")
+    return "\n".join(lines)
+
+
+def markdown_counts(counts: list[TableCounts], snapshot_date: date) -> str:
+    lines = [
+        f"### Published to Supabase api and R2 gold/ (snapshot {snapshot_date})",
+        "",
+        "| Table | Source | Supabase | R2 snapshot | R2 latest | OK |",
+        "|---|---:|---:|---:|---:|---|",
+    ]
+    for c in counts:
+        lines.append(
+            f"| {c.table} | {c.source:,} | {c.supabase:,} | {c.r2_snapshot:,} | "
+            f"{c.r2_latest:,} | {'✅' if c.ok else '❌'} |"
+        )
+    return "\n".join(lines) + "\n"
 
 
 def count_published(result: PublishResult, conn: Any, s3: Any, bucket_name: str) -> TableCounts:

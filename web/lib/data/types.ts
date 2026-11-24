@@ -127,4 +127,6 @@ export type SiteData = {
   advice: TravelAdvice[];
   rates: ExchangeRate[]; // latest date only
   images: CityImage[];
+  /** api.last_updated.published_at: when the prod pipeline last published (ADR-0012). */
+  publishedAt: string | null;
 };

@@ -147,6 +147,8 @@ describe("formatting", () => {
     ];
     expect(lastUpdated(rows)).toBe("2026-11-22T11:00:00+00:00");
     expect(lastUpdated([])).toBeNull();
+    // api.last_updated wins when present.
+    expect(lastUpdated(rows, "2026-11-24T17:50:00+00:00")).toBe("2026-11-24T17:50:00+00:00");
   });
 });
 

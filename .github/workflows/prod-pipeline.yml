@@ -1,6 +1,9 @@
 # Production pipeline (ADR-0012): the same code as the laptop's Airflow DAGs, configured for prod.
 #   ingestion (python -m ingestion.run) -> Iceberg on Cloudflare R2, catalog in Supabase Postgres
-# Trino runs as a throwaway container in this job. Nothing is written to the Supabase api schema.
+#   -> dbt build (target prod) on a throwaway Trino in this job
+#   -> publish (python -m ingestion.publish) to Supabase api and R2 gold/, row counts verified
+# The single writer to production: the laptop's publish is a dry run.
+# Failures: the job fails, GitHub emails the failure, and the job summary names the failed step.
 # Runbook: docs/runbooks/prod-pipeline.md
 name: Prod pipeline
 
@@ -54,13 +57,22 @@ env:
   ICEBERG_CATALOG_DB_SSLMODE: require
   S3_REGION: auto
   PYTHONPATH: ingestion/src
+  # dbt (dbt/profiles.yml, output "prod"): the job's Trino on localhost:8080
+  DBT_TARGET: prod
+  DBT_TRINO_HOST: localhost
+  DBT_TRINO_PORT: "8080"
+  # Publish: gold Parquet to the same R2 bucket (gold/), tables to Supabase through the pooler
+  CLOUD_S3_BUCKET: wanderlake-lake
+  CLOUD_S3_REGION: auto
+  SUPABASE_DB_PORT: "5432"
+  SUPABASE_DB_NAME: postgres
 
 jobs:
   pipeline:
-    name: Ingest (${{ inputs.mode || 'daily' }})
+    name: Pipeline (${{ inputs.mode || 'daily' }})
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: ${{ inputs.mode == 'backfill' && 240 || 45 }}
+    timeout-minutes: ${{ inputs.mode == 'backfill' && 300 || 90 }}
     env:
       S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
       S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
@@ -69,6 +81,13 @@ jobs:
       ICEBERG_CATALOG_DB_USER: ${{ secrets.ICEBERG_CATALOG_DB_USER }}
       ICEBERG_CATALOG_DB_PASSWORD: ${{ secrets.ICEBERG_CATALOG_DB_PASSWORD }}
       REST_COUNTRIES_API_KEY: ${{ secrets.REST_COUNTRIES_API_KEY }}
+      # The publisher uses the same R2 token and the same pooler host as the lakehouse.
+      CLOUD_S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+      CLOUD_S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+      CLOUD_S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+      SUPABASE_DB_HOST: ${{ secrets.ICEBERG_CATALOG_DB_HOST }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       # Inputs pass through the environment, never straight into scripts.
       INPUT_MODE: ${{ inputs.mode || 'daily' }}
       INPUT_DATE: ${{ inputs.date }}
@@ -86,6 +105,11 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --locked
 
+      - name: Install dbt (same pinned versions as the Airflow image)
+        run: |
+          uv venv .venv-dbt --python "$PYTHON_VERSION"
+          uv pip install --python .venv-dbt -r infra/airflow/requirements-dbt.txt
+
       - name: Check inputs
         run: |
           for v in "$INPUT_DATE" "$INPUT_START" "$INPUT_END"; do
@@ -93,6 +117,10 @@ jobs:
               echo "::error::dates must look like YYYY-MM-DD, got: $v"; exit 1
             fi
           done
+
+      - name: Record the run in ops.pipeline_runs (applies Supabase migrations)
+        id: record_start
+        run: uv run --no-sync python -m ingestion.publish.runs start
 
       - name: Start Trino (prod catalog on R2 + Supabase)
         id: trino
@@ -120,6 +148,7 @@ jobs:
           exit 1
 
       - name: Bootstrap lakehouse schemas (idempotent)
+        id: bootstrap
         run: docker exec trino bash /opt/wanderlake/sql/bootstrap.sh
 
       - name: Ingest to bronze
@@ -140,9 +169,46 @@ jobs:
         if: always() && steps.trino.outcome == 'success'
         run: bash infra/prod/bronze-counts.sh bronze | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # A failed source does not stop the build: the site gets every source that did load, and
+      # the job still fails (and emails) because the ingest step failed.
+      - name: dbt build (target prod)
+        id: dbt
+        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' }}
+        working-directory: dbt
+        run: |
+          ../.venv-dbt/bin/dbt deps
+          status=0
+          ../.venv-dbt/bin/dbt build || status=$?
+          cp target/run_results.json "$RUNNER_TEMP/dbt-build-results.json" || true
+          exit "$status"
+
+      - name: dbt source freshness (warns only)
+        if: ${{ !cancelled() && steps.dbt.outcome == 'success' }}
+        continue-on-error: true
+        working-directory: dbt
+        run: ../.venv-dbt/bin/dbt source freshness
+
+      - name: Publish to Supabase api and R2 gold/ (verified row counts)
+        id: publish
+        if: ${{ !cancelled() && steps.dbt.outcome == 'success' }}
+        run: >-
+          uv run --no-sync python -m ingestion.publish
+          --counts-json "$RUNNER_TEMP/publish-counts.json" --summary "$GITHUB_STEP_SUMMARY"
+
       - name: Trino logs on failure
         if: failure() && steps.trino.outcome == 'success'
         run: docker logs --tail 200 trino
+
+      - name: Record the result and write the summary
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: >-
+          uv run --no-sync python -m ingestion.publish.runs finish --status "$JOB_STATUS"
+          --counts "$RUNNER_TEMP/publish-counts.json"
+          --dbt-results "$RUNNER_TEMP/dbt-build-results.json"
+          --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Stop Trino
         if: always()

@@ -50,7 +50,8 @@ Build `silver.exchange_rates` (dbt, contract enforced) with **EUR as the base**:
 - One table answers conversions: `amount * units_per_eur(B) / units_per_eur(A)` on a date.
 - Conversions between an ECB currency and a CBAR currency mix two fixings, so they can differ
   from either bank's own cross rate by a few tenths of a percent (100 USD -> 169.55 AZN on
-  2026-11-19, while CBAR's own rate gives 170.00). Tests guard the AZN/USD peg band (1.69-1.71).
+  2026-11-19, while CBAR's own rate gives 170.00). Tests guard the AZN/USD peg band (first 1.69-1.71; widened to 1.68-1.72 when the first prod
+  run with 400 days of history found cross rates up to 0.75% off on volatile EUR/USD days).
 - ECB and CBAR publish on different days; consumers that need both use the latest date with both
   sources (as the city-currency test does).
 - Adding a city whose currency is in neither source fails the city-currency test.

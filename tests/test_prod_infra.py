@@ -39,6 +39,23 @@ def test_workflow_is_a_single_writer_with_least_privilege() -> None:
     assert "timeout-minutes" in job
 
 
+def test_workflow_transforms_and_publishes_in_the_right_order() -> None:
+    wf = workflow()
+    assert wf["env"]["WANDERLAKE_ENV"] == "prod"  # the only environment that publishes
+    assert wf["env"]["DBT_TARGET"] == "prod"
+    (job,) = wf["jobs"].values()
+    steps = {s.get("id"): s for s in job["steps"] if s.get("id")}
+    order = [s.get("id") for s in job["steps"] if s.get("id")]
+    assert order == ["record_start", "trino", "bootstrap", "ingest", "dbt", "publish"]
+    # dbt runs even when a source failed (the job still fails); publish only after dbt passed.
+    assert "steps.bootstrap.outcome == 'success'" in steps["dbt"]["if"]
+    assert "steps.dbt.outcome == 'success'" in steps["publish"]["if"]
+    assert "python -m ingestion.publish" in steps["publish"]["run"]
+    finish = next(s for s in job["steps"] if "ingestion.publish.runs finish" in s.get("run", ""))
+    assert finish["if"] == "always()"
+    assert finish["env"]["STEPS_JSON"] == "${{ toJSON(steps) }}"
+
+
 def test_workflow_actions_are_pinned_to_commits() -> None:
     uses = re.findall(r"uses:\s*(\S+)", WORKFLOW.read_text())
     assert uses

@@ -15,7 +15,7 @@ POLICIES="repos/$REPO/environments/$ENVIRONMENT/deployment-branch-policies"
 # Secret name in GitHub = value from .env (the prod pipeline reads the generic names).
 : "${TF_VAR_cloudflare_account_id:?}" "${CLOUD_S3_ACCESS_KEY:?}" "${CLOUD_S3_SECRET_KEY:?}"
 : "${SUPABASE_DB_HOST:?}" "${SUPABASE_DB_USER:?}" "${PROD_ICEBERG_CATALOG_DB_PASSWORD:?}"
-: "${REST_COUNTRIES_API_KEY:?}"
+: "${REST_COUNTRIES_API_KEY:?}" "${TF_VAR_supabase_db_password:?}"
 declare -A SECRETS=(
     [S3_ENDPOINT]="https://${TF_VAR_cloudflare_account_id}.r2.cloudflarestorage.com"
     [S3_ACCESS_KEY]="$CLOUD_S3_ACCESS_KEY"
@@ -24,6 +24,10 @@ declare -A SECRETS=(
     [ICEBERG_CATALOG_DB_USER]="wanderlake_catalog.${SUPABASE_DB_USER#*.}"
     [ICEBERG_CATALOG_DB_PASSWORD]="$PROD_ICEBERG_CATALOG_DB_PASSWORD"
     [REST_COUNTRIES_API_KEY]="$REST_COUNTRIES_API_KEY"
+    # Publisher (ingestion.publish, ops.pipeline_runs): the project's database owner, as the
+    # laptop's make publish used; the host is ICEBERG_CATALOG_DB_HOST (same pooler).
+    [SUPABASE_DB_USER]="$SUPABASE_DB_USER"
+    [SUPABASE_DB_PASSWORD]="$TF_VAR_supabase_db_password"
 )
 
 echo "== environment $ENVIRONMENT (deployment branches: $BRANCHES)"

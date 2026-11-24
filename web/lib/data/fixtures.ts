@@ -186,4 +186,5 @@ export const fixtureData: SiteData = {
   advice,
   rates,
   images,
+  publishedAt: "2026-11-22T17:48:00+00:00",
 };

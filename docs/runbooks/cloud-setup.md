@@ -22,7 +22,7 @@ OpenTofu in [`infra/tofu`](../../infra/tofu):
 | `VERCEL_API_TOKEN` | Vercel provider | root `.env` | GitHub Actions secret |
 | `REST_COUNTRIES_API_KEY` | `rest_countries` DAG (Airflow) | root `.env` | GitHub Actions secret (when a cloud job runs it) |
 | `CLOUD_S3_ACCESS_KEY`, `CLOUD_S3_SECRET_KEY` | publish job: R2 Parquet (`CLOUD_S3_BUCKET`) | root `.env` | GitHub Actions secret (when a cloud job runs it) |
-| `SUPABASE_DB_HOST`, `_PORT`, `_USER`, `_NAME` | publish job: Supabase session pooler (password: `TF_VAR_supabase_db_password`) | root `.env` | GitHub Actions variables (not secrets) |
+| `SUPABASE_DB_HOST`, `_PORT`, `_USER`, `_NAME` | publish job: Supabase session pooler (password: `TF_VAR_supabase_db_password`) | root `.env` | GitHub Environment `production` secrets `SUPABASE_DB_USER`, `SUPABASE_DB_PASSWORD` (host shared with the catalog); see the [prod pipeline runbook](prod-pipeline.md) |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | website (server side), `make web-env`, `make api-check` | root `.env` | Vercel environment variables via OpenTofu (key write-only, not in state; read-only by RLS) |
 
 Rules:
