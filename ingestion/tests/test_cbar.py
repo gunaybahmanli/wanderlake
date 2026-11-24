@@ -17,12 +17,14 @@ from ingestion.sources.cbar import (
     BRONZE_ARROW_SCHEMA,
     BRONZE_TABLE,
     CbarError,
+    CbarUnavailableError,
     RawObject,
     build_key,
     build_url,
     fetch_rates,
     ingest_rates,
     load_bronze,
+    load_bronze_range,
     parse_rates,
     raw_to_arrow,
     today_in_baku,
@@ -112,6 +114,27 @@ def test_today_in_baku_uses_baku_time() -> None:
     assert today_in_baku(datetime(2026, 11, 19, 21, 30, tzinfo=UTC)) == date(2026, 11, 20)
 
 
+@pytest.mark.parametrize(
+    ("body", "content_type"),
+    [
+        (b"<!DOCTYPE html><html><head><title>503</title></head></html>", "application/xml"),
+        (b"\n  <html><body>Please wait</body></html>", ""),
+        (b"<p>busy</p>", "text/html; charset=utf-8"),
+    ],
+)
+def test_a_web_page_instead_of_xml_is_temporary(
+    requests_mock: rm.Mocker, body: bytes, content_type: str
+) -> None:
+    from ingestion.pipeline import is_transient
+
+    url = build_url(date(2026, 11, 13))
+    requests_mock.get(url, content=body, headers={"Content-Type": content_type})
+    with pytest.raises(CbarUnavailableError, match="web page instead of XML") as caught:
+        fetch_rates(date(2026, 11, 13), session=build_session(backoff_factor=0), today=TODAY)
+    assert is_transient(caught.value)  # retried by the runner, unlike malformed XML
+    assert not is_transient(CbarError("invalid XML: mismatched tag"))
+
+
 def test_weekend_fetch_keeps_last_business_day(requests_mock: rm.Mocker) -> None:
     requests_mock.get(build_url(date(2026, 11, 14)), content=FIXTURE)
 
@@ -172,3 +195,21 @@ def test_reload_of_the_same_date_keeps_one_set_of_rows(
     assert rows.num_rows == 8  # 2 dates x 4 currencies
     assert sorted({run for d, run in pairs if d == date(2026, 11, 14)}) == ["run-c"]
     assert sorted({run for d, run in pairs if d == date(2026, 11, 15)}) == ["run-b"]
+
+
+def test_range_load_replaces_the_range_in_one_commit(
+    requests_mock: rm.Mocker, s3: Any, catalog: SqlCatalog
+) -> None:
+    for day in ("2026-11-14", "2026-11-15"):
+        requests_mock.get(build_url(date.fromisoformat(day)), content=FIXTURE)
+        ingest_rates(date.fromisoformat(day), session=build_session(backoff_factor=0), today=TODAY)
+    load_bronze(date(2026, 11, 14), "daily", catalog=catalog, s3=s3)
+
+    result = load_bronze_range(
+        date(2026, 11, 13), date(2026, 11, 15), "backfill", catalog=catalog, s3=s3
+    )
+
+    rows = catalog.load_table(BRONZE_TABLE).scan().to_arrow()
+    assert result["rows"] == rows.num_rows == 8  # 2 dates x 4 currencies
+    assert result["missing_raw"] == "2026-11-13"
+    assert set(rows["_dag_run_id"].to_pylist()) == {"backfill"}

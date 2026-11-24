@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -35,7 +35,7 @@ from pyiceberg.types import (
 )
 
 from ingestion.common.http import build_session
-from ingestion.common.iceberg import ensure_table, replace_rows
+from ingestion.common.iceberg import ensure_table, replace_range, replace_rows
 from ingestion.common.logging import get_logger, log_event
 from ingestion.common.s3 import put_json, s3_client
 
@@ -108,6 +108,20 @@ def build_key(requested_date: date) -> str:
     return KEY_TEMPLATE.format(date=requested_date.isoformat())
 
 
+def response_rate_date(rows: list[dict[str, Any]]) -> date:
+    """The date a response is for: its newest rate date.
+
+    Usually every row has the same date. After the ECB stops publishing a currency, Frankfurter
+    keeps returning that currency's last rate for a while under its own, older date (for example
+    BGN at 1.9558 dated 2025-12-31 in answers for January 2026, after Bulgaria adopted the euro).
+    Those rows are kept with their own date; silver keeps one row per (rate_date, currency).
+    """
+    try:
+        return max(date.fromisoformat(r["date"]) for r in rows)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise FrankfurterError(f"rows without a valid date: {exc}") from exc
+
+
 def fetch_rates(
     requested_date: date,
     session: requests.Session | None = None,
@@ -130,10 +144,7 @@ def fetch_rates(
     if not payload:
         raise FrankfurterError(f"no rates available for {requested_date.isoformat()}")
 
-    rate_dates = {row["date"] for row in payload}
-    if len(rate_dates) != 1:
-        raise FrankfurterError(f"expected one rate date, got {sorted(rate_dates)}")
-    rate_date = date.fromisoformat(rate_dates.pop())
+    rate_date = response_rate_date(payload)
 
     result = RatesResponse(
         body=response.content,
@@ -225,11 +236,7 @@ def raw_to_arrow(
     except KeyError as exc:
         raise FrankfurterError(f"{raw.source_file}: missing metadata {exc.args[0]!r}") from exc
 
-    rate_dates = {r["date"] for r in rows}
-    if len(rate_dates) != 1:
-        found = sorted(rate_dates)
-        raise FrankfurterError(f"{raw.source_file}: expected one rate date, got {found}")
-    rate_date = date.fromisoformat(rate_dates.pop())
+    rate_date = response_rate_date(rows)
     meta_rate_date = raw.metadata.get("rate_date")
     if meta_rate_date and date.fromisoformat(meta_rate_date) != rate_date:
         raise FrankfurterError(
@@ -241,7 +248,7 @@ def raw_to_arrow(
     n = len(rows)
     columns = {
         "requested_date": [requested_date] * n,
-        "rate_date": [rate_date] * n,
+        "rate_date": [date.fromisoformat(r["date"]) for r in rows],  # each row keeps its own
         "base_currency": [str(r["base"]) for r in rows],
         "quote_currency": [str(r["quote"]) for r in rows],
         "rate": [Decimal(r["rate"]).quantize(quantum) for r in rows],
@@ -273,4 +280,44 @@ def load_bronze(
         "source_file": raw.source_file,
     }
     log_event(log, "frankfurter.bronze_loaded", **result)
+    return result
+
+
+def load_bronze_range(
+    start: date,
+    end: date,
+    dag_run_id: str | None,
+    bucket: str = RAW_BUCKET,
+    catalog: Any | None = None,
+    s3: Any | None = None,
+) -> dict[str, Any]:
+    """Backfills: load every requested date start..end that has a raw file in ONE Iceberg commit
+    that replaces the range (a commit per day is far too slow against a remote catalog). The rows
+    are the same as load_bronze day by day. Dates without a raw file are listed in the result."""
+    s3 = s3 or s3_client()
+    loaded_at = datetime.now(UTC)
+    batches, missing = [], []
+    day = start
+    while day <= end:
+        try:
+            raw = read_raw(day, bucket=bucket, s3=s3)
+        except s3.exceptions.NoSuchKey:
+            missing.append(day.isoformat())
+        else:
+            batches.append(raw_to_arrow(raw, dag_run_id=dag_run_id, loaded_at=loaded_at))
+        day += timedelta(days=1)
+    if not batches:
+        raise FrankfurterError(f"no raw files for {start}..{end}")
+    batch = pa.concat_tables(batches)
+    table = ensure_table(BRONZE_TABLE, BRONZE_SCHEMA, BRONZE_PARTITION_SPEC, catalog=catalog)
+    rows = replace_range(table, batch, "requested_date", start.isoformat(), end.isoformat())
+    result = {
+        "table": BRONZE_TABLE,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "days": len(batches),
+        "rows": rows,
+        "missing_raw": ",".join(missing) or "none",
+    }
+    log_event(log, "frankfurter.bronze_range_loaded", **result)
     return result

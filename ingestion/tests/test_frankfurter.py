@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime
 
 import pytest
@@ -140,3 +141,24 @@ def test_ingest_rerun_overwrites_same_key(requests_mock: rm.Mocker, session, s3)
     assert [o["Key"] for o in listed] == ["frankfurter/rates/date=2026-11-18/rates.json"]
     obj = s3.get_object(Bucket=BUCKET, Key=listed[0]["Key"])
     assert obj["Metadata"]["rate_date"] == "2026-11-18"
+
+
+def test_a_discontinued_currency_keeps_its_own_older_date(
+    requests_mock: rm.Mocker, session
+) -> None:
+    """January 2026: Frankfurter still returns BGN at its last rate, dated 2025-12-31."""
+    rows = json.loads(ecb_body("2026-01-12")) + [
+        {"date": "2025-12-31", "base": "EUR", "quote": "BGN", "rate": 1.9558}
+    ]
+    requests_mock.get(URL, json=rows)
+
+    result = fetch_rates(date(2026, 1, 12), session=session)
+
+    assert result.rate_date == date(2026, 1, 12)  # the newest date is the response's date
+    assert result.rows == 4
+
+
+def test_rows_without_a_date_are_rejected(requests_mock: rm.Mocker, session) -> None:
+    requests_mock.get(URL, json=[{"base": "EUR", "quote": "USD", "rate": 1.1}])
+    with pytest.raises(FrankfurterError, match="without a valid date"):
+        fetch_rates(date(2026, 1, 12), session=session)

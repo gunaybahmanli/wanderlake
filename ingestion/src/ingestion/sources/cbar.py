@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from xml.etree.ElementTree import Element
@@ -47,8 +47,8 @@ from pyiceberg.types import (
     TimestamptzType,
 )
 
-from ingestion.common.http import build_session
-from ingestion.common.iceberg import ensure_table, replace_rows
+from ingestion.common.http import SourceUnavailableError, build_session
+from ingestion.common.iceberg import ensure_table, replace_range, replace_rows
 from ingestion.common.logging import get_logger, log_event
 from ingestion.common.s3 import put_object, s3_client
 
@@ -106,6 +106,20 @@ _NOMINAL = re.compile(r"^\d+$")
 
 class CbarError(RuntimeError):
     """Raised when CBAR returns an unusable file or a date cannot be loaded."""
+
+
+class CbarUnavailableError(CbarError, SourceUnavailableError):
+    """CBAR answered with a web page instead of the XML file (seen under load: HTTP 200 with an
+    HTML body). Temporary, so it is retried; the page is never stored in raw."""
+
+
+def check_is_xml(body: bytes, content_type: str) -> None:
+    """Raise CbarUnavailableError for an HTML answer. Malformed XML still fails in parse_rates."""
+    start = body.lstrip(b"\xef\xbb\xbf \t\r\n")[:64].lower()
+    if "html" in content_type.lower() or start.startswith((b"<!doctype", b"<html")):
+        raise CbarUnavailableError(
+            f"got a web page instead of XML (Content-Type {content_type!r}, {len(body)} bytes)"
+        )
 
 
 @dataclass(frozen=True)
@@ -224,6 +238,7 @@ def fetch_rates(
     response = session.get(url, headers={"Accept": "application/xml"})
     response.raise_for_status()
 
+    check_is_xml(response.content, response.headers.get("Content-Type", ""))
     parsed = parse_rates(response.content)
     if parsed.rate_date > requested_date:
         raise CbarError(f"file date {parsed.rate_date} is after the requested {requested_date}")
@@ -343,4 +358,44 @@ def load_bronze(
         "source_file": raw.source_file,
     }
     log_event(log, "cbar.bronze_loaded", **result)
+    return result
+
+
+def load_bronze_range(
+    start: date,
+    end: date,
+    dag_run_id: str | None,
+    bucket: str = RAW_BUCKET,
+    catalog: Any | None = None,
+    s3: Any | None = None,
+) -> dict[str, Any]:
+    """Backfills: load every requested date start..end that has a raw file in ONE Iceberg commit
+    that replaces the range (a commit per day is far too slow against a remote catalog). The rows
+    are the same as load_bronze day by day. Dates without a raw file are listed in the result."""
+    s3 = s3 or s3_client()
+    loaded_at = datetime.now(UTC)
+    batches, missing = [], []
+    day = start
+    while day <= end:
+        try:
+            raw = read_raw(day, bucket=bucket, s3=s3)
+        except s3.exceptions.NoSuchKey:
+            missing.append(day.isoformat())
+        else:
+            batches.append(raw_to_arrow(raw, dag_run_id=dag_run_id, loaded_at=loaded_at))
+        day += timedelta(days=1)
+    if not batches:
+        raise CbarError(f"no raw files for {start}..{end}")
+    batch = pa.concat_tables(batches)
+    table = ensure_table(BRONZE_TABLE, BRONZE_SCHEMA, BRONZE_PARTITION_SPEC, catalog=catalog)
+    rows = replace_range(table, batch, "requested_date", start.isoformat(), end.isoformat())
+    result = {
+        "table": BRONZE_TABLE,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "days": len(batches),
+        "rows": rows,
+        "missing_raw": ",".join(missing) or "none",
+    }
+    log_event(log, "cbar.bronze_range_loaded", **result)
     return result

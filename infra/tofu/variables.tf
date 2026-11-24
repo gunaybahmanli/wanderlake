@@ -43,6 +43,12 @@ variable "r2_bucket_name" {
   default     = "wanderlake-lake"
 }
 
+variable "r2_raw_bucket_name" {
+  description = "Name of the R2 bucket for raw source responses of the production pipeline."
+  type        = string
+  default     = "wanderlake-raw"
+}
+
 variable "r2_location" {
   description = "R2 location hint (apac, eeur, enam, weur, wnam, oc). Only applied at creation."
   type        = string
