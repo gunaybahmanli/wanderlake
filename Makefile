@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 .PHONY: help setup lint format test clean up down ps logs psql s3-ls backfill test-dags \
 	tofu-init tofu-fmt tofu-validate tofu-plan tofu-apply \
-	web-install web-dev web-lint web-build web-test web-env \
+	web-install web-dev web-lint web-build web-test web-env web-e2e \
 	trino lakehouse-init lakehouse-smoke-test build mode-query mode-ingest mode-full weather-backfill \
 	config-load dbt-deps dbt-build dbt-test dbt-source-freshness dbt-docs dbt-manifest \
 	publish api-check
@@ -136,6 +136,17 @@ web-build: ## Website: production build
 
 web-test: ## Website: run the unit tests (Vitest)
 	@cd web && npm test
+
+# Playwright runs in its official image (browser and system libraries included), so nothing is
+# installed on the host. Keep the tag equal to @playwright/test in web/package.json.
+PLAYWRIGHT_IMAGE := mcr.microsoft.com/playwright:v1.65.0-noble
+
+web-e2e: ## Website: end-to-end tests (Playwright, Chromium) on a fixture build; optional locally, CI runs them
+	@echo "Builds web/ with fixture data (replaces web/.next), then runs Playwright in $(PLAYWRIGHT_IMAGE)."
+	@echo "Stop the data stack first (make down): Chromium needs a few hundred MB."
+	@cd web && DATA_SOURCE=fixture npm run build
+	@docker run --rm --network host --user "$$(id -u):$$(id -g)" -e HOME=/tmp -e CI=1 \
+		-v "$(CURDIR)/web":/work -w /work $(PLAYWRIGHT_IMAGE) npx playwright test
 
 web-env: ## Website: write web/.env.local (Supabase URL and anon key) from the root .env, for local dev
 	@test -f .env || { echo "Missing .env: run 'cp .env.example .env' and fill it in."; exit 1; }

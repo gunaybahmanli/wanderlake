@@ -3,9 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CityImage } from "@/components/CityImage";
+import { ClimateChart } from "@/components/ClimateChart";
+import { CurrencyConverter } from "@/components/CurrencyConverter";
 import { DataUnavailable } from "@/components/DataUnavailable";
 import { Flag } from "@/components/Flag";
 import { getCityIds, getCityPage, loadOrUnavailable } from "@/lib/data";
+import { toRateRows } from "@/lib/data/converter";
 import {
   type CityPageData,
   alertStatusLabel,
@@ -258,11 +261,29 @@ function BestMonths({ page }: { page: CityPageData }) {
   );
 }
 
-function ComingSoon({ id, title, text }: { id: string; title: string; text: string }) {
+function Converter({ page }: { page: CityPageData }) {
   return (
-    <section className="slot" aria-labelledby={id}>
-      <h2 id={id}>{title}</h2>
-      <p className="muted">{text}</p>
+    <section className="card" aria-labelledby="converter">
+      <h2 id="converter">Currency converter</h2>
+      <CurrencyConverter rates={toRateRows(page.rates)} cityCurrency={page.city.currency} />
+      <p className="note small">
+        Reference rates for information only (ECB, and CBAR for the Azerbaijani manat); banks and
+        exchange offices apply their own rates and fees.
+      </p>
+    </section>
+  );
+}
+
+function Climate({ page }: { page: CityPageData }) {
+  return (
+    <section aria-labelledby="climate">
+      <h2 id="climate">Climate by month</h2>
+      <ClimateChart
+        cityId={page.city.city_id}
+        cityName={page.city.name}
+        climate={page.climate}
+        bestMonths={page.city.best_months ?? []}
+      />
     </section>
   );
 }
@@ -290,21 +311,9 @@ function CityContent({ page }: { page: CityPageData }) {
       </div>
       <Forecast page={page} />
       <BestMonths page={page} />
+      <Climate page={page} />
+      <Converter page={page} />
       <Advice page={page} />
-
-      {/* Part B slots: filled by the currency converter and the climate chart. */}
-      <div className="city-grid">
-        <ComingSoon
-          id="converter"
-          title="Currency converter"
-          text={`Coming soon: convert between ${city.currency} and other currencies with today's rates.`}
-        />
-        <ComingSoon
-          id="climate"
-          title="Climate by month"
-          text="Coming soon: average temperatures, rainy days and sunshine for every month."
-        />
-      </div>
     </article>
   );
 }

@@ -678,3 +678,247 @@ section.card {
 .sources li {
   margin-bottom: 0.6rem;
 }
+
+/* Currency converter */
+
+.converter-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+@media (min-width: 40rem) {
+  .converter-fields {
+    grid-template-columns: minmax(8rem, 1.2fr) 1fr auto 1fr;
+  }
+}
+
+/* Inputs and selects share one height, so a row of fields lines up. */
+.field input,
+.field select {
+  box-sizing: border-box;
+  height: 2.6rem;
+}
+
+.field input {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.field input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.field input[aria-invalid="true"] {
+  border-color: var(--alert-fg);
+}
+
+.field-error {
+  margin: 0.5rem 0 0;
+  color: var(--alert-fg);
+  font-size: 0.9rem;
+}
+
+.swap {
+  white-space: nowrap;
+}
+
+.converter-result {
+  margin-top: 1rem;
+  min-height: 3.5rem;
+}
+
+.converter-amount {
+  margin: 0 0 0.25rem;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Climate chart (hand-built SVG). Lines, markers and bars meet 3:1 (WCAG non-text contrast)
+   against the page in both themes: max 5.2/8.9, min 6.0/9.3, bars 3.1/3.6 (light/dark). Lines
+   and markers get a halo in the page colour, so they stay distinct where they cross a bar. */
+
+:root {
+  --chart-max: #b4441b;
+  --chart-min: #1f5fa8;
+  --chart-rain: #6b93a8;
+  --chart-best: rgba(31, 111, 120, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --chart-max: #ff9e6b;
+    --chart-min: #8cbcff;
+    --chart-rain: #4f7385;
+    --chart-best: rgba(108, 195, 204, 0.16);
+  }
+}
+
+.climate {
+  margin: 0;
+}
+
+/* Two layouts of the same chart: wide by default, compact on small screens. The hidden one is
+   display:none, so it is also hidden from assistive technology. */
+.climate-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-family: var(--font-sans);
+}
+
+.climate-chart-compact {
+  display: none;
+}
+
+@media (max-width: 40rem) {
+  .climate-chart-wide {
+    display: none;
+  }
+
+  .climate-chart-compact {
+    display: block;
+  }
+}
+
+.chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.chart-tick,
+.chart-axis-label,
+.chart-month {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.chart-month-best {
+  fill: var(--fg);
+  font-weight: 700;
+}
+
+.chart-best {
+  fill: var(--chart-best);
+}
+
+.chart-rain {
+  fill: var(--chart-rain);
+}
+
+.chart-line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart-halo {
+  fill: none;
+  stroke: var(--bg);
+  stroke-width: 6.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart-max {
+  stroke: var(--chart-max);
+}
+
+.chart-min {
+  stroke: var(--chart-min);
+  stroke-dasharray: 6 4;
+}
+
+.chart-max-point,
+.chart-min-point {
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+
+.chart-max-point {
+  fill: var(--chart-max);
+}
+
+.chart-min-point {
+  fill: var(--chart-min);
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  margin: 0.75rem 0 0.25rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.chart-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 1.1rem;
+  height: 0.7rem;
+  border-radius: 2px;
+}
+
+.legend-max {
+  height: 3px;
+  background: var(--chart-max);
+}
+
+.legend-min {
+  height: 0;
+  border-top: 3px dashed var(--chart-min);
+}
+
+.legend-rain {
+  background: var(--chart-rain);
+}
+
+.legend-best {
+  background: var(--chart-best);
+  border: 1px solid var(--accent);
+}
+
+.chart-table {
+  margin-top: 0.5rem;
+}
+
+.chart-table summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.chart-table table {
+  margin-top: 0.75rem;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-table th,
+.chart-table td {
+  padding: 0.35rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+}
+
+.chart-table th[scope="row"],
+.chart-table thead th:first-child {
+  text-align: left;
+}
+
+.chart-table .row-best th {
+  font-weight: 700;
+}

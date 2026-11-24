@@ -4,6 +4,7 @@ import type {
   CityDetails,
   CityOverview,
   ClimateMonth,
+  ExchangeRate,
   ForecastDay,
   SiteData,
   TravelAdvice,
@@ -268,6 +269,7 @@ export type CityPageData = {
   forecast: ForecastView[];
   advice: TravelAdvice | null;
   climate: ClimateMonth[];
+  rates: ExchangeRate[]; // latest conversion matrix, for the converter
 };
 
 /** Everything one city page shows, or null for an unknown city id. */
@@ -282,6 +284,7 @@ export function cityPageData(data: SiteData, cityId: string): CityPageData | nul
     climate: data.climate
       .filter((c) => c.city_id === cityId)
       .sort((a, b) => a.month - b.month),
+    rates: data.rates,
   };
 }
 

@@ -4,6 +4,7 @@ import type {
   CityDetails,
   CityOverview,
   ClimateMonth,
+  ExchangeRate,
   ForecastDay,
   SiteData,
   TravelAdvice,
@@ -132,4 +133,29 @@ const advice: TravelAdvice[] = [
   },
 ];
 
-export const fixtureData: SiteData = { cities, details, climate, forecasts, advice };
+// Conversion matrix for the fixture currencies, built the way gold builds it: through the euro
+// (EUR per 1 unit of each currency), so every pair and its inverse are consistent.
+const EUR_PER_UNIT: Record<string, number> = {
+  AZN: 0.535733419051, // CBAR: 1.7 AZN per USD
+  EUR: 1,
+  JPY: 0.0061,
+  USD: 0.910746812386, // ECB: 1.098 USD per EUR
+};
+const RATE_SOURCE: Record<string, string> = { AZN: "cbar", EUR: "ecb", JPY: "ecb", USD: "ecb" };
+
+const rates: ExchangeRate[] = Object.keys(EUR_PER_UNIT).flatMap((from) =>
+  Object.keys(EUR_PER_UNIT)
+    .filter((to) => to !== from)
+    .map((to) => ({
+      date: RUN_DATE,
+      from_currency: from,
+      to_currency: to,
+      rate: EUR_PER_UNIT[from] / EUR_PER_UNIT[to],
+      from_rate_date: from === "EUR" ? RUN_DATE : "2026-11-20",
+      to_rate_date: to === "EUR" ? RUN_DATE : "2026-11-20",
+      source_from: RATE_SOURCE[from],
+      source_to: RATE_SOURCE[to],
+    })),
+);
+
+export const fixtureData: SiteData = { cities, details, climate, forecasts, advice, rates };
