@@ -12,13 +12,16 @@ import requests_mock as rm
 from conftest import BUCKET
 from pyiceberg.catalog.sql import SqlCatalog
 
+from ingestion.common.http import TryLaterError
 from ingestion.sources.wikimedia import (
     COMMONS_API,
     USER_AGENT,
     WIKIDATA_API,
+    WikidataLagError,
     WikimediaError,
     build_wikimedia_session,
     canonical_media_url,
+    get_claims,
     image_metadata,
     ingest_snapshot,
     license_family,
@@ -249,3 +252,47 @@ def test_load_without_raw_files_fails(s3: Any, catalog: SqlCatalog) -> None:
         load_bronze(
             SNAPSHOT, dag_run_id=None, bucket=BUCKET, cities=CITIES[:1], catalog=catalog, s3=s3
         )
+
+
+# --- maxlag etiquette ----------------------------------------------------------------------------
+
+MAXLAG = {"error": {"code": "maxlag", "info": "Waiting for a replica", "lag": 10.1}}
+
+
+def test_maxlag_waits_as_asked_and_retries(requests_mock: rm.Mocker) -> None:
+    requests_mock.get(
+        WIKIDATA_API,
+        [
+            {"json": MAXLAG, "headers": {"Retry-After": "7"}},
+            {"json": MAXLAG},
+            {"json": claims(("Rome Skyline.jpg", "normal"))},
+        ],
+    )
+    waits: list[float] = []
+    session = build_wikimedia_session()
+
+    response = get_claims(session, "Q220", sleep=waits.append)
+
+    assert response.json()["claims"]["P18"][0]["mainsnak"]["datavalue"]["value"] == (
+        "Rome Skyline.jpg"
+    )
+    assert waits == [7.0, 10.0]  # Retry-After (at least 5 s), growing with each attempt
+    assert all(r.qs["maxlag"] == ["5"] for r in requests_mock.request_history)
+
+
+def test_persistent_maxlag_defers_without_storing_the_error(
+    requests_mock: rm.Mocker, s3: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import ingestion.sources.wikimedia as wikimedia_module
+
+    monkeypatch.setattr(wikimedia_module.time, "sleep", lambda seconds: None)
+    requests_mock.get(WIKIDATA_API, json=MAXLAG)
+    waits: list[float] = []
+    with pytest.raises(WikidataLagError):
+        get_claims(build_wikimedia_session(), "Q220", attempts=3, sleep=waits.append)
+    assert len(waits) == 2 and max(waits) <= 60
+
+    with pytest.raises(TryLaterError):
+        ingest_snapshot(SNAPSHOT, bucket=BUCKET, cities=CITIES[:1], s3=s3, pause_seconds=0)
+    stored = s3.list_objects_v2(Bucket=BUCKET, Prefix="wikimedia/").get("KeyCount", 0)
+    assert stored == 0

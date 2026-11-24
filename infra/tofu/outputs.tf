@@ -6,6 +6,11 @@ output "r2_bucket_name" {
   value       = cloudflare_r2_bucket.lake.name
 }
 
+output "r2_raw_bucket_name" {
+  description = "Name of the R2 bucket for raw source responses (production pipeline)."
+  value       = cloudflare_r2_bucket.raw.name
+}
+
 output "r2_s3_endpoint" {
   description = "S3 API endpoint for R2 in this account (use as S3_ENDPOINT, path-style, region auto)."
   value       = "https://${var.cloudflare_account_id}.r2.cloudflarestorage.com"

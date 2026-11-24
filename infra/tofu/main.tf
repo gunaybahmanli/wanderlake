@@ -12,6 +12,20 @@ resource "cloudflare_r2_bucket" "lake" {
   }
 }
 
+# Raw landing zone of the production pipeline (ADR-0012): source responses stored unchanged, the
+# cloud counterpart of the local SeaweedFS "raw" bucket. The prod Iceberg warehouse lives in the
+# lake bucket above (prefix warehouse/), next to the published Parquet (prefix gold/).
+resource "cloudflare_r2_bucket" "raw" {
+  account_id    = var.cloudflare_account_id
+  name          = var.r2_raw_bucket_name
+  location      = var.r2_location
+  storage_class = "Standard"
+
+  lifecycle {
+    prevent_destroy = true # raw responses are the replayable source of truth
+  }
+}
+
 # Supabase: managed Postgres (with pgvector available) for the cloud app database and API.
 # Free tier: no instance_size is set, so the project gets the free compute size.
 resource "supabase_project" "wanderlake" {

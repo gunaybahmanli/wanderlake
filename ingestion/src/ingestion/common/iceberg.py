@@ -8,6 +8,9 @@ Configured only from environment variables:
     ICEBERG_CATALOG_DB_PORT      default 5432
     ICEBERG_CATALOG_DB_NAME      default iceberg_catalog
     ICEBERG_CATALOG_DB_USER, ICEBERG_CATALOG_DB_PASSWORD
+    ICEBERG_CATALOG_DB_SCHEMA    optional Postgres schema of the catalog tables (prod: the
+                                 iceberg_catalog schema in Supabase; dev: the default schema)
+    ICEBERG_CATALOG_DB_SSLMODE   optional libpq sslmode, e.g. require (prod)
     S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_REGION   (generic S3 settings, path-style)
     ICEBERG_CATALOG_URI          optional full SQLAlchemy URI override (tests use SQLite)
 """
@@ -17,7 +20,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -50,13 +53,21 @@ def catalog_properties(env: Mapping[str, str] | None = None) -> dict[str, str]:
     uri = env.get("ICEBERG_CATALOG_URI")
     if not uri:
         _require(env, "ICEBERG_CATALOG_DB_USER", "ICEBERG_CATALOG_DB_PASSWORD")
-        uri = "postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}".format(
+        # psycopg 3: the same driver as ingestion.publish, in the Airflow image and in prod.
+        uri = "postgresql+psycopg://{user}:{password}@{host}:{port}/{db}".format(
             user=quote(env["ICEBERG_CATALOG_DB_USER"], safe=""),
             password=quote(env["ICEBERG_CATALOG_DB_PASSWORD"], safe=""),
             host=env.get("ICEBERG_CATALOG_DB_HOST") or "postgres",
             port=env.get("ICEBERG_CATALOG_DB_PORT") or "5432",
             db=env.get("ICEBERG_CATALOG_DB_NAME") or "iceberg_catalog",
         )
+        query = {}
+        if env.get("ICEBERG_CATALOG_DB_SSLMODE"):
+            query["sslmode"] = env["ICEBERG_CATALOG_DB_SSLMODE"]
+        if env.get("ICEBERG_CATALOG_DB_SCHEMA"):
+            query["options"] = f"-csearch_path={env['ICEBERG_CATALOG_DB_SCHEMA']}"
+        if query:
+            uri = f"{uri}?{urlencode(query)}"
 
     props = {
         "uri": uri,

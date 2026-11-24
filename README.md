@@ -336,6 +336,25 @@ make api-check     # anon SELECT works; INSERT, UPDATE, DELETE are rejected
 
 Credentials (`CLOUD_S3_*`, `SUPABASE_DB_*`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`) come from `.env`; the [cloud runbook](docs/runbooks/cloud-setup.md) covers creating and rotating them. A published gold column is part of the API: change it with a new Supabase migration in the same change (a test compares the migrations with the dbt contracts).
 
+### Production ingestion (GitHub Actions)
+
+Dev is the laptop (Airflow and Cosmos on SeaweedFS). Prod is the workflow [`prod-pipeline.yml`](.github/workflows/prod-pipeline.yml), which runs the **same code** nightly, configured only by environment variables (`WANDERLAKE_ENV=prod`). The architecture decision (ADR-0012) and a runbook follow with the transform and publish step.
+
+| | Dev (laptop) | Prod (GitHub Actions) |
+|---|---|---|
+| Runs | one Airflow DAG per source | `python -m ingestion.run daily` at 17:15 UTC, or manually |
+| Raw responses | SeaweedFS bucket `raw` | R2 bucket `wanderlake-raw` |
+| Iceberg data | `s3://lakehouse/warehouse/` | `s3://wanderlake-lake/warehouse/` (R2) |
+| Iceberg catalog | Postgres database `iceberg_catalog` | Supabase Postgres, schema `iceberg_catalog` (role `wanderlake_catalog`; not exposed through the REST API), same catalog name `wanderlake` |
+| Trino | Compose service, 768 MB heap | throwaway container in the job: 10 GB limit, 8 GB heap, 4 GB per query ([config](infra/prod/trino/etc/config.properties)) |
+
+- **Runner** ([`ingestion/src/ingestion/pipeline.py`](ingestion/src/ingestion/pipeline.py)): config, GeoNames (monthly), REST Countries (weekly), FCDO, Wikimedia (weekly), Frankfurter, CBAR, Open-Meteo forecast and recent history, calling the same `ingest_*`/`load_*` functions as the DAGs. Weekly and monthly sources run only when their latest bronze snapshot is older than their period, so reruns are safe. A failing source is retried twice (60 s apart) and does not stop the others; a source that asks to come back later (Wikidata `maxlag`) is reported as deferred and stays due.
+- **Workflow:** environment `production` (secrets), never two runs at once (concurrency group, no cancelling), actions pinned to commits, read-only token. It starts Trino with the prod catalog, creates the schemas if needed, runs the runner, and writes a job summary: rows loaded per source and row counts of every bronze table.
+- **Manual runs:** *Actions → Prod pipeline → Run workflow*, mode `daily` (optional date) or `backfill` (Frankfurter and CBAR day by day for 400 days, Open-Meteo history month by month from 2023-01-01, then current snapshots of every source). Same with the CLI: `gh workflow run prod-pipeline.yml -f mode=backfill`. To refill a gap in one source, pick it in `only` with `start`/`end` (for example `-f mode=backfill -f only=cbar_rates -f start=2026-07-07 -f end=2026-09-12`); only that part runs. Failures that look temporary (network errors, HTTP 429/5xx, an HTML error page instead of data) are retried twice, 60 s apart; data errors fail at once.
+- **One-time setup** (done; idempotent): `make prod-catalog-init` (catalog role, schema and tables in Supabase) and `make prod-github-env` (environment `production`, its allowed branches and secrets from `.env`; values are never printed).
+
+In this phase prod only ingests: nothing is written to the Supabase `api` schema, which the laptop still publishes.
+
 ### `frankfurter_rates`
 
 Fetches the European Central Bank reference rates from `https://api.frankfurter.dev/v2/providers/ecb/rates?date=<date>&base=EUR` and stores the response body unchanged. The date is the run's logical date, and re-running a date overwrites the same object.
@@ -515,6 +534,8 @@ CI (GitHub Actions) runs the same checks on every pull request and push to `main
 | `infra/compose` | Docker Compose stack for local development |
 | `infra/airflow` | Custom Airflow image (Dockerfile, pinned requirements) |
 | `infra/tofu` | OpenTofu infrastructure as code for cloud resources |
+| `infra/prod` | Production pipeline: prod Trino settings, one-time catalog and GitHub setup |
+| `.github/workflows` | CI and the production pipeline |
 | `ingestion` | Python ingestion package and its tests |
 | `airflow/dags` | Airflow DAGs |
 | `streaming` | Kafka and Debezium configuration and consumers |

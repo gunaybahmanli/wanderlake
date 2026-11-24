@@ -4,9 +4,10 @@
 	web-install web-dev web-lint web-build web-test web-env web-e2e \
 	trino lakehouse-init lakehouse-smoke-test build mode-query mode-ingest mode-full weather-backfill \
 	config-load dbt-deps dbt-build dbt-test dbt-source-freshness dbt-docs dbt-manifest \
-	publish api-check
+	publish api-check prod-catalog-init prod-github-env
 
 PROFILE ?= core
+BRANCHES ?= main
 SERVICE ?=
 BUCKET ?= raw
 DAG ?=
@@ -156,7 +157,7 @@ trino: ## Open the Trino CLI on the iceberg catalog (needs PROFILE including que
 	@$(COMPOSE_ALL) exec trino trino --catalog iceberg
 
 lakehouse-init: ## Create the bronze, silver and gold Iceberg schemas (idempotent)
-	@$(TRINO_CLI) --file /opt/wanderlake/sql/bootstrap.sql
+	@$(COMPOSE_ALL) exec -T trino bash /opt/wanderlake/sql/bootstrap.sh
 
 lakehouse-smoke-test: ## Create, write, read and drop a temporary Iceberg table; show its files
 	@echo "== 1. create iceberg.bronze.smoke_test, insert a row, read it back"
@@ -199,6 +200,15 @@ dbt-docs: ## dbt: generate docs and serve them on http://localhost:8082 (needs m
 	@echo "dbt docs on http://localhost:$(DBT_DOCS_PORT) (Ctrl+C to stop)"
 	@$(COMPOSE_ALL) run --rm --no-deps -p $(DBT_DOCS_PORT):$(DBT_DOCS_PORT) dbt \
 		docs serve --host 0.0.0.0 --port $(DBT_DOCS_PORT) --no-browser
+
+prod-catalog-init: ## Prod: Iceberg catalog role, schema and tables in Supabase (one-time, idempotent)
+	@test -f .env || { echo "Missing .env"; exit 1; }
+	@set -a && . ./.env && SUPABASE_DB_PASSWORD="$${TF_VAR_supabase_db_password:-}" && set +a \
+		&& bash infra/prod/catalog-init.sh
+
+prod-github-env: ## Prod: GitHub Environment "production" and its secrets from .env (BRANCHES="main ...")
+	@test -f .env || { echo "Missing .env"; exit 1; }
+	@set -a && . ./.env && set +a && BRANCHES="$(BRANCHES)" bash infra/prod/github-environment.sh
 
 publish: ## Cloud: publish gold to Supabase (api) and R2 Parquet, then verify row counts (needs Airflow)
 	@docker inspect -f '{{.State.Health.Status}}' wanderlake-airflow-1 2>/dev/null | grep -q healthy \

@@ -52,7 +52,7 @@ from pyiceberg.types import (
 )
 
 from ingestion import __version__
-from ingestion.common.http import build_session
+from ingestion.common.http import TryLaterError, build_session
 from ingestion.common.iceberg import ensure_table, replace_rows
 from ingestion.common.logging import get_logger, log_event
 from ingestion.common.s3 import put_json, s3_client
@@ -68,6 +68,10 @@ USER_AGENT = (
 )
 THUMB_WIDTH = 1280
 REQUEST_PAUSE_SECONDS = 1.0  # about one request per second, one at a time
+# Wikidata answers "maxlag" while its replicas lag behind: wait (Retry-After, at least 5 s, at
+# most 60 s) and ask again, a few times; then give up politely until the next run.
+MAXLAG_ATTEMPTS = 5
+MAXLAG_MAX_WAIT_SECONDS = 60.0
 PREFIX_TEMPLATE = "wikimedia/{kind}/snapshot_date={date}/"
 RAW_BUCKET = "raw"
 BRONZE_TABLE = "bronze.wikimedia_city_images"
@@ -119,6 +123,10 @@ BRONZE_SCHEMA = Schema(
 BRONZE_PARTITION_SPEC = PartitionSpec(
     PartitionField(source_id=1, field_id=1000, transform=YearTransform(), name="snapshot_year")
 )
+
+
+class WikidataLagError(TryLaterError):
+    """Wikidata kept answering maxlag: try again on the next run."""
 
 
 class WikimediaError(RuntimeError):
@@ -180,6 +188,44 @@ def p18_candidates(claims_doc: dict[str, Any]) -> list[dict[str, str]]:
     return sorted(files, key=lambda f: order.get(f["rank"], 2))  # stable: keeps Wikidata order
 
 
+def get_claims(
+    session: requests.Session,
+    wikidata_id: str,
+    attempts: int = MAXLAG_ATTEMPTS,
+    sleep: Any | None = None,
+) -> requests.Response:
+    """wbgetclaims for P18 with maxlag=5. On a maxlag answer, wait as Wikidata asks and retry;
+    after `attempts` answers raise WikidataLagError. Only a real answer is returned (and stored)."""
+    for attempt in range(1, attempts + 1):
+        response = session.get(
+            WIKIDATA_API,
+            params={
+                "action": "wbgetclaims",
+                "entity": wikidata_id,
+                "property": "P18",
+                "format": "json",
+                "maxlag": "5",
+            },
+        )
+        response.raise_for_status()
+        error = response.json().get("error") or {}
+        if error.get("code") != "maxlag":
+            return response
+        try:
+            wait = float(response.headers.get("Retry-After") or 5)
+        except ValueError:
+            wait = 5.0
+        wait = min(max(wait, 5.0) * attempt, MAXLAG_MAX_WAIT_SECONDS)
+        log_event(
+            log, "wikimedia.maxlag", wikidata_id=wikidata_id, lag=error.get("lag"), attempt=attempt
+        )
+        if attempt < attempts:
+            (sleep or time.sleep)(wait)
+    raise WikidataLagError(
+        f"Wikidata is lagging (maxlag) after {attempts} attempts; try again on the next run"
+    )
+
+
 def ingest_snapshot(
     snapshot_date: date,
     bucket: str = RAW_BUCKET,
@@ -203,17 +249,7 @@ def ingest_snapshot(
     for i, city in enumerate(cities):
         if i and pause_seconds:
             time.sleep(pause_seconds)
-        claims = session.get(
-            WIKIDATA_API,
-            params={
-                "action": "wbgetclaims",
-                "entity": city.wikidata_id,
-                "property": "P18",
-                "format": "json",
-                "maxlag": "5",
-            },
-        )
-        claims.raise_for_status()
+        claims = get_claims(session, city.wikidata_id)
         put_json(
             bucket,
             f"{wikidata_prefix}{city.id}.json",

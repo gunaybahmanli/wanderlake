@@ -1,0 +1,149 @@
+# Production pipeline (ADR-0012): the same code as the laptop's Airflow DAGs, configured for prod.
+#   ingestion (python -m ingestion.run) -> Iceberg on Cloudflare R2, catalog in Supabase Postgres
+# Trino runs as a throwaway container in this job. Nothing is written to the Supabase api schema.
+# Runbook: docs/runbooks/prod-pipeline.md
+name: Prod pipeline
+
+on:
+  schedule:
+    - cron: "15 17 * * *" # daily, after the ECB (about 16:00 CET) and CBAR rates are out
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "daily: one day (weekly/monthly sources when due). backfill: one-time history load."
+        type: choice
+        options: [daily, backfill]
+        default: daily
+      date:
+        description: "daily: run date YYYY-MM-DD (empty = today, UTC)"
+        required: false
+        default: ""
+      start:
+        description: "backfill: first day for Frankfurter/CBAR YYYY-MM-DD (empty = 400 days up to end)"
+        required: false
+        default: ""
+      end:
+        description: "backfill: last day YYYY-MM-DD (empty = today, UTC)"
+        required: false
+        default: ""
+      only:
+        description: "backfill: rerun just one part to refill a gap (all = full backfill)"
+        type: choice
+        options: [all, frankfurter_rates, cbar_rates, open_meteo_history]
+        default: all
+
+permissions:
+  contents: read
+
+# Never two prod runs at once: a new run waits for the running one instead of cancelling it.
+concurrency:
+  group: prod-pipeline
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.12"
+  TRINO_IMAGE: trinodb/trino:484 # same version as infra/compose/compose.yaml
+  # Prod configuration that is not secret. Secrets come from the "production" environment below.
+  WANDERLAKE_ENV: prod
+  WANDERLAKE_RAW_BUCKET: wanderlake-raw
+  ICEBERG_CATALOG_NAME: wanderlake
+  ICEBERG_WAREHOUSE: s3://wanderlake-lake/warehouse
+  ICEBERG_CATALOG_DB_PORT: "5432"
+  ICEBERG_CATALOG_DB_NAME: postgres
+  ICEBERG_CATALOG_DB_SCHEMA: iceberg_catalog
+  ICEBERG_CATALOG_DB_SSLMODE: require
+  S3_REGION: auto
+  PYTHONPATH: ingestion/src
+
+jobs:
+  pipeline:
+    name: Ingest (${{ inputs.mode || 'daily' }})
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: ${{ inputs.mode == 'backfill' && 240 || 45 }}
+    env:
+      S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+      S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+      S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+      ICEBERG_CATALOG_DB_HOST: ${{ secrets.ICEBERG_CATALOG_DB_HOST }}
+      ICEBERG_CATALOG_DB_USER: ${{ secrets.ICEBERG_CATALOG_DB_USER }}
+      ICEBERG_CATALOG_DB_PASSWORD: ${{ secrets.ICEBERG_CATALOG_DB_PASSWORD }}
+      REST_COUNTRIES_API_KEY: ${{ secrets.REST_COUNTRIES_API_KEY }}
+      # Inputs pass through the environment, never straight into scripts.
+      INPUT_MODE: ${{ inputs.mode || 'daily' }}
+      INPUT_DATE: ${{ inputs.date }}
+      INPUT_START: ${{ inputs.start }}
+      INPUT_END: ${{ inputs.end }}
+      INPUT_ONLY: ${{ inputs.only }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Install Python dependencies
+        run: uv sync --locked
+
+      - name: Check inputs
+        run: |
+          for v in "$INPUT_DATE" "$INPUT_START" "$INPUT_END"; do
+            if [[ -n "$v" && ! "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+              echo "::error::dates must look like YYYY-MM-DD, got: $v"; exit 1
+            fi
+          done
+
+      - name: Start Trino (prod catalog on R2 + Supabase)
+        id: trino
+        run: |
+          export ICEBERG_CATALOG_JDBC_URL="jdbc:postgresql://${ICEBERG_CATALOG_DB_HOST}:${ICEBERG_CATALOG_DB_PORT}/${ICEBERG_CATALOG_DB_NAME}?currentSchema=${ICEBERG_CATALOG_DB_SCHEMA}&sslmode=${ICEBERG_CATALOG_DB_SSLMODE}"
+          # -e NAME passes values from this step's environment, so no secret is on the command line.
+          docker run -d --name trino --memory 10g -p 8080:8080 \
+            -e ICEBERG_CATALOG_NAME -e ICEBERG_WAREHOUSE -e ICEBERG_CATALOG_JDBC_URL \
+            -e ICEBERG_CATALOG_DB_USER -e ICEBERG_CATALOG_DB_PASSWORD \
+            -e S3_ENDPOINT -e S3_ACCESS_KEY -e S3_SECRET_KEY -e S3_REGION \
+            -v "$PWD/infra/prod/trino/etc/config.properties:/etc/trino/config.properties:ro" \
+            -v "$PWD/infra/prod/trino/etc/jvm.config:/etc/trino/jvm.config:ro" \
+            -v "$PWD/infra/compose/trino/catalog:/etc/trino/catalog:ro" \
+            -v "$PWD/infra/compose/trino/sql:/opt/wanderlake/sql:ro" \
+            "$TRINO_IMAGE"
+          # Same check as the compose healthcheck: /v1/info reports "starting": false.
+          for i in $(seq 1 60); do
+            if docker exec trino /usr/lib/trino/bin/health-check >/dev/null 2>&1; then
+              echo "Trino is ready after about $((i * 3)) s"; exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::Trino did not become ready within 3 minutes"
+          docker logs --tail 200 trino
+          exit 1
+
+      - name: Bootstrap lakehouse schemas (idempotent)
+        run: docker exec trino bash /opt/wanderlake/sql/bootstrap.sh
+
+      - name: Ingest to bronze
+        id: ingest
+        run: |
+          if [[ "$INPUT_MODE" == backfill ]]; then
+            args=(backfill)
+            [[ -n "$INPUT_START" ]] && args+=(--start "$INPUT_START")
+            [[ -n "$INPUT_END" ]] && args+=(--end "$INPUT_END")
+            [[ -n "$INPUT_ONLY" && "$INPUT_ONLY" != all ]] && args+=(--only "$INPUT_ONLY")
+          else
+            args=(daily)
+            [[ -n "$INPUT_DATE" ]] && args+=(--date "$INPUT_DATE")
+          fi
+          uv run --no-sync python -m ingestion.run --summary "$GITHUB_STEP_SUMMARY" "${args[@]}"
+
+      - name: Bronze row counts
+        if: always() && steps.trino.outcome == 'success'
+        run: bash infra/prod/bronze-counts.sh bronze | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Trino logs on failure
+        if: failure() && steps.trino.outcome == 'success'
+        run: docker logs --tail 200 trino
+
+      - name: Stop Trino
+        if: always()
+        run: docker rm -f trino || true

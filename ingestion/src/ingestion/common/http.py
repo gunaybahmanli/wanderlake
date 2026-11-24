@@ -15,6 +15,16 @@ RETRY_STATUSES: tuple[int, ...] = (429, 500, 502, 503, 504)
 USER_AGENT = f"wanderlake-ingestion/{__version__}"
 
 
+class TryLaterError(RuntimeError):
+    """The source asked us to come back later (for example Wikidata's maxlag) and polite retries
+    did not help. Not a fault: the runner reports the source as deferred, and it stays due."""
+
+
+class SourceUnavailableError(RuntimeError):
+    """The source answered, but with an error page instead of data (for example an HTML page with
+    HTTP 200 from an overloaded server or firewall). Temporary: the runner retries it."""
+
+
 class TimeoutSession(requests.Session):
     """A requests.Session that applies a default timeout to every request."""
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -22,6 +23,7 @@ from ingestion.sources.frankfurter import (
     RawObject,
     build_key,
     load_bronze,
+    load_bronze_range,
     raw_to_arrow,
 )
 
@@ -110,6 +112,23 @@ def test_missing_metadata_is_rejected() -> None:
         raw_to_arrow(raw, None)
 
 
+def test_bronze_keeps_each_rows_own_rate_date() -> None:
+    raw = raw_object("2026-01-12", "2026-01-12")
+    rows = json.loads(raw.body) + [
+        {"date": "2025-12-31", "base": "EUR", "quote": "BGN", "rate": 1.9558}
+    ]
+    raw = RawObject(json.dumps(rows).encode(), raw.metadata, raw.source_file)
+
+    table = raw_to_arrow(raw, None)
+
+    by_quote = dict(
+        zip(table["quote_currency"].to_pylist(), table["rate_date"].to_pylist(), strict=True)
+    )
+    assert by_quote["BGN"] == date(2025, 12, 31)
+    assert by_quote["USD"] == date(2026, 1, 12)
+    assert set(table["requested_date"].to_pylist()) == {date(2026, 1, 12)}
+
+
 # --- Iceberg -------------------------------------------------------------------------------------
 
 
@@ -131,6 +150,26 @@ def test_loading_the_same_date_twice_keeps_one_set_of_rows(s3, catalog: SqlCatal
     assert rows.num_rows == 6
     assert by_date[date(2026, 11, 14)] == ["run-c"] * 3  # replaced, not duplicated
     assert by_date[date(2026, 11, 17)] == ["run-b"] * 3  # other date untouched
+
+
+def test_range_load_matches_daily_loads_in_one_commit(s3, catalog: SqlCatalog) -> None:
+    put_raw(s3, "2026-11-14", "2026-11-13")  # Saturday: last business day's rates
+    put_raw(s3, "2026-11-16", "2026-11-16")
+    put_raw(s3, "2026-11-17", "2026-11-17")
+    load_bronze(date(2026, 11, 16), "daily-run", catalog=catalog, s3=s3)  # replaced below
+    table = catalog.load_table(BRONZE_TABLE)
+    snapshots_before = len(table.snapshots())
+
+    result = load_bronze_range(
+        date(2026, 11, 14), date(2026, 11, 17), "backfill", catalog=catalog, s3=s3
+    )
+
+    table = catalog.load_table(BRONZE_TABLE)
+    rows = table.scan().to_arrow()
+    assert result["rows"] == rows.num_rows == 9  # 3 days x 3 currencies
+    assert result["days"] == 3 and result["missing_raw"] == "2026-11-15"
+    assert set(rows["_dag_run_id"].to_pylist()) == {"backfill"}  # daily load replaced
+    assert len(table.snapshots()) - snapshots_before <= 2  # one overwrite (delete + append)
 
 
 def test_ensure_table_returns_existing_table(catalog: SqlCatalog) -> None:
@@ -166,12 +205,32 @@ def test_catalog_properties_come_from_env() -> None:
     )
 
     assert (
-        props["uri"] == "postgresql+psycopg2://iceberg:p%40ss%2Fword@postgres:5432/iceberg_catalog"
+        props["uri"] == "postgresql+psycopg://iceberg:p%40ss%2Fword@postgres:5432/iceberg_catalog"
     )
     assert props["warehouse"] == "s3://lakehouse/warehouse"
     assert props["s3.endpoint"] == "http://seaweedfs:8333"
     assert props["s3.force-virtual-addressing"] == "false"
     assert props["init_catalog_tables"] == "false"
+
+
+def test_prod_catalog_uses_a_schema_and_tls() -> None:
+    """Prod: catalog tables in the iceberg_catalog schema of Supabase, over TLS (ADR-0012)."""
+    props = catalog_properties(
+        {
+            "ICEBERG_CATALOG_NAME": "wanderlake",
+            "ICEBERG_WAREHOUSE": "s3://wanderlake-lake/warehouse",
+            "ICEBERG_CATALOG_DB_HOST": "pooler.example.com",
+            "ICEBERG_CATALOG_DB_NAME": "postgres",
+            "ICEBERG_CATALOG_DB_USER": "wanderlake_catalog.ref",
+            "ICEBERG_CATALOG_DB_PASSWORD": "pw",
+            "ICEBERG_CATALOG_DB_SCHEMA": "iceberg_catalog",
+            "ICEBERG_CATALOG_DB_SSLMODE": "require",
+        }
+    )
+    assert props["uri"] == (
+        "postgresql+psycopg://wanderlake_catalog.ref:pw@pooler.example.com:5432/postgres"
+        "?sslmode=require&options=-csearch_path%3Diceberg_catalog"
+    )
 
 
 def test_catalog_name_comes_from_env(tmp_path: Path) -> None:
