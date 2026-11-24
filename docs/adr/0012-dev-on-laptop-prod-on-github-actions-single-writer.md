@@ -1,6 +1,6 @@
 # ADR-0012: Dev on the laptop, prod on GitHub Actions, single writer to production
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-24
 
 ## Context

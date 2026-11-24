@@ -62,9 +62,11 @@ describe("conversion math", () => {
   });
 
   it("reports the older rate date and the source of each side", () => {
-    const q = quote(rates, "AZN", "EUR")!;
+    const q = quote(rates, "AZN", "JPY")!;
     expect(q.rateDate).toBe("2026-11-20");
-    expect(sourceLabel(q)).toBe("CBAR (AZN), ECB (EUR)");
+    expect(sourceLabel(q)).toBe("CBAR (AZN), ECB (JPY)");
+    expect(sourceLabel(quote(rates, "AZN", "USD")!)).toBe("CBAR"); // direct CBAR rate
+    expect(sourceLabel(quote(rates, "EUR", "AZN")!)).toBe("CBAR");
     expect(sourceLabel(quote(rates, "EUR", "USD")!)).toBe("ECB");
   });
 });

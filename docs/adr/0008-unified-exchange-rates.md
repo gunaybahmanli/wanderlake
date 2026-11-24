@@ -1,7 +1,7 @@
 # ADR-0008: Unified exchange rates: ECB primary, CBAR for missing currencies, EUR base
 
 - **Status:** Accepted
-- **Date:** 2026-11-20
+- **Date:** 2026-11-20 (amended 2026-11-24: direct CBAR rates for AZN pairs)
 
 ## Context
 
@@ -32,10 +32,25 @@ Build `silver.exchange_rates` (dbt, contract enforced) with **EUR as the base**:
   where `AZN per 1 X = rate_azn / nominal`.
 - Weekend and holiday repeats are collapsed in staging to one row per actual `rate_date` and
   currency per source (latest load wins). Each row records its `source` (`ecb` or `cbar`).
+- **AZN pairs in the conversion matrix use CBAR's direct rate** (`gold.fct_exchange_rate`,
+  amended 2026-11-24). On each date, AZN takes its value from the latest CBAR bulletin; if that
+  same bulletin lists the other currency X, then `X -> AZN = AZN per 1 X` and `AZN -> X` is its
+  inverse, both sides dated by that bulletin and sourced `cbar`. AZN <-> USD is therefore always
+  the official 1.7000. Pairs without AZN, and AZN pairs whose currency CBAR does not publish
+  (currently THB), stay cross rates through the EUR base. Requiring the same bulletin means a
+  currency CBAR stops publishing falls back to the cross rate instead of a stale direct rate.
+  `silver.exchange_rates` is unchanged.
 - Arithmetic: divisions use `decimal(20, 10)` inputs (Trino then returns `decimal(38, 18)`;
   `decimal(38, 18)` inputs would round to 6 decimals), stored as `decimal(24, 10)`.
 
 ## Alternatives considered
+
+- **Cross rates for every pair, AZN included** (the original decision): one rule, but the
+  site's AZN/USD shows 1.68-1.72 instead of the peg on volatile days, which is wrong for the
+  pair that matters most here. Replaced for AZN pairs by the direct-rate amendment.
+- **CBAR direct rates in silver** (switching the source of USD, EUR and others to CBAR):
+  would make every non-AZN pair mix two banks' fixings. Doing it in the gold matrix keeps ECB
+  for pairs without AZN.
 
 - **CBAR as the primary source (AZN base):** natural for Azerbaijan, but the ECB set is the
   widely used reference for European and global prices, and it is the only source for EUR-zone
@@ -48,10 +63,17 @@ Build `silver.exchange_rates` (dbt, contract enforced) with **EUR as the base**:
 ## Consequences
 
 - One table answers conversions: `amount * units_per_eur(B) / units_per_eur(A)` on a date.
-- Conversions between an ECB currency and a CBAR currency mix two fixings, so they can differ
-  from either bank's own cross rate by a few tenths of a percent (100 USD -> 169.55 AZN on
-  2026-11-19, while CBAR's own rate gives 170.00). Tests guard the AZN/USD peg band (first 1.69-1.71; widened to 1.68-1.72 when the first prod
-  run with 400 days of history found cross rates up to 0.75% off on volatile EUR/USD days).
+- Cross rates between an ECB currency and a CBAR currency mix two fixings, so they can differ
+  from either bank's own rate by a few tenths of a percent. Before the amendment this applied to
+  AZN/USD too: 100 USD -> 171.27 AZN on 2026-03-02 (ECB USD at 14:15 CET against CBAR's morning
+  AZN per EUR), while CBAR's official rate gives 170.00; the first prod run with 400 days of
+  history found such gaps up to 0.75% on volatile EUR/USD days. With direct CBAR rates for AZN
+  pairs, 100 USD -> AZN is 170.00 on every date, and the residual mixing remains only in pairs
+  without AZN and in AZN <-> THB.
+- Tests: the AZN/USD rate in gold must be direct from CBAR and within 1.6999-1.7001
+  (`assert_gold_azn_usd_official`); the AZN/USD cross rate in silver, which the remaining cross
+  rates are built from, keeps a sanity band of 1.68-1.72 (`assert_silver_azn_usd_cross_in_band`;
+  first 1.69-1.71, widened after the 400-day prod run).
 - ECB and CBAR publish on different days; consumers that need both use the latest date with both
   sources (as the city-currency test does).
 - Adding a city whose currency is in neither source fails the city-currency test.
