@@ -95,18 +95,33 @@ To rotate one: change it at the provider (R2 token in the Cloudflare dashboard, 
 password in the dashboard or with `make prod-catalog-init` for the catalog role), update `.env`,
 then run `make prod-github-env`. The next run uses the new value.
 
-## Testing a workflow change before merge
+## Changes that affect production: dry run on the branch, publish from `main`
 
-`workflow_dispatch` runs the workflow file from the chosen branch, but the `production`
-environment only accepts `main`. For a test run from a feature branch:
+**Rule: production is published only from `main`, after the pull request is merged.** A feature
+branch never gets the `production` environment, and the prod workflow is never run from one,
+not even for a test: such a run publishes unmerged code to the live site.
+
+1. **On the branch, publishing disabled (dry run).** Test on the laptop (dev): `make mode-query`,
+   `make dbt-build` (or `dbt build -s <models>+`), check the result with Trino, `make down`; then
+   `make mode-ingest` and `make publish`, which prints `DRY RUN: nothing was written` with the
+   rows and destinations of every table. Plus `make lint`, `make test` and CI on the pull
+   request. Do not set `WANDERLAKE_ALLOW_DEV_PUBLISH` or `--allow-dev-publish` for this.
+2. **Merge** the pull request.
+3. **Publish from `main`:** the next nightly run, or a manual one (`gh workflow run
+   prod-pipeline.yml`, which runs `main`). Check the run summary, the counts and the site.
+
+The `production` environment accepts only `main`; `make prod-github-env` always sets it to
+`main` and removes any other branch policy. Check it with:
 
 ```bash
-make prod-github-env BRANCHES="main feat/my-branch"   # allow the branch for a while
-gh workflow run prod-pipeline.yml --ref feat/my-branch
-make prod-github-env BRANCHES="main"                  # always reset afterwards
+gh api repos/gunaybahmanli/wanderlake/environments/production/deployment-branch-policies \
+  --jq '[.branch_policies[].name]'    # must be ["main"]
 ```
 
-Such a run writes to production like a nightly run does.
+The laptop's gold is dev data, so a dry run shows the change on dev's history, not prod's. A
+change whose effect depends on prod's longer history is checked in the first `main` run after
+the merge; if that run's dbt tests fail, nothing is published and the site keeps the last good
+data.
 
 ## Prod Trino memory
 
