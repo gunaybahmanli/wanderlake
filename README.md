@@ -291,7 +291,7 @@ The Airflow container mounts `config/` read-only at `/opt/wanderlake/config`, so
 | `config_cities` | daily 00:30, and on demand | `config/cities.yaml` (this repo) | `iceberg.bronze.config_cities` (full replace; no raw copy, the file is in git) |
 | `wikimedia_city_images` | weekly, Mon 02:00 | [Wikidata](https://www.wikidata.org) (CC0) and [Wikimedia Commons](https://commons.wikimedia.org) (each image under its own open licence) | raw `s3://raw/wikimedia/{wikidata,commons}/snapshot_date=YYYY-MM-DD/<city_id>.json`, then bronze `iceberg.bronze.wikimedia_city_images` |
 | `wanderlake_transform` | when the daily bronze assets are updated, or the weekly city images, or 18:00 fallback | the bronze tables above | dbt silver and gold (Cosmos), then the `gold` asset |
-| `publish_cloud` | when the `gold` asset is updated (no clock time) | the gold tables | Supabase schema `api` (read-only REST API) and R2 Parquet; see [Cloud publish](#cloud-publish) |
+| `publish_cloud` | when the `gold` asset is updated (no clock time) | the gold tables | **dry run on the laptop** (single writer: only prod publishes); see [Cloud publish](#cloud-publish) |
 
 ### Daily flow
 
@@ -312,11 +312,13 @@ Mon 02:00 wikimedia_city_images - load_bronze -> bronze.wikimedia_city_images --
 - **Schedule:** `AssetOrTimeSchedule`: a run when all four daily inputs have new events since the last asset-triggered run, or every day at 18:00 UTC. On a normal day the asset run starts at about 16:35 UTC. A fallback run first checks the `gold` asset and skips when gold was built in the last 20 hours, so the fallback only builds when ingestion failed or was late. Weekly and monthly sources (and FCDO) are read at their latest state.
 - **Tasks** (Astronomer Cosmos, one per dbt node): `gate` >> `source_freshness` (warnings logged, errors fail the run) >> `seeds` >> `models` (each model's `run` task followed by its `test` task; tests on several models run after all of them) >> `publish_gold`. A failing model or test stops only what depends on it, and a retry reruns only that node.
 - **Needs** `make mode-full` (Airflow and Trino together). Unpausing the DAG runs the latest missed 18:00 slot once (`catchup=False`).
-- **Then `publish_cloud`** runs on the `gold` asset event, so every successful transform is published once (below).
+- **Then `publish_cloud`** runs on the `gold` asset event. On the laptop it is a dry run: it reports what it would publish, and production is published only by the [prod pipeline](#production-pipeline-github-actions).
 
 ### Cloud publish
 
-`publish_cloud` copies the gold tables the website needs from the laptop's lakehouse to free cloud services ([ADR-0010](docs/adr/0010-serve-site-from-supabase-rest-with-read-only-rls.md)). Code: [`ingestion/src/ingestion/publish/`](ingestion/src/ingestion/publish/).
+The publish step copies the gold tables the website needs from the lakehouse to free cloud services ([ADR-0010](docs/adr/0010-serve-site-from-supabase-rest-with-read-only-rls.md)). Code: [`ingestion/src/ingestion/publish/`](ingestion/src/ingestion/publish/).
+
+**Single writer** ([ADR-0012](docs/adr/0012-dev-on-laptop-prod-on-github-actions-single-writer.md)): only `WANDERLAKE_ENV=prod`, the nightly [prod pipeline](#production-pipeline-github-actions), writes. On the laptop, `make publish` and the `publish_cloud` DAG are dry runs: they read gold and print each table, its row count and where it would go, and write nothing. Override only in an emergency, with `WANDERLAKE_ALLOW_DEV_PUBLISH=1` or `--allow-dev-publish`; the next nightly run replaces it.
 
 | Table | Supabase `api.<table>` | R2 (`wanderlake-lake`) |
 |---|---|---|
@@ -325,20 +327,20 @@ Mon 02:00 wikimedia_city_images - load_bronze -> bronze.wikimedia_city_images --
 
 - **Tasks:** `apply_migrations` (new SQL files in [`supabase/migrations/`](supabase/migrations/): schema `api`, tables, RLS, grants) >> `publish_table` (one mapped task per table) >> `verify_counts`.
 - **Per table:** read `gold.<table>` with PyIceberg (no Trino needed), write both Parquet files to R2, then replace `api.<table>` in **one transaction** (COPY into a temporary staging table, delete, insert): API readers see the old rows or the new rows, never a partial table.
-- **Verification:** source rows, Supabase `count(*)` and the row counts of both Parquet files read back from R2 must be equal for every table, or the run fails with the full table of counts.
+- **Verification:** source rows, Supabase `count(*)` and the row counts of both Parquet files read back from R2 must be equal for every table, or the run fails with the full table of counts. Only then does `api.last_updated` (one row, read-only for anon) move: the site shows it in the footer and on the About page.
 - **Read-only public API:** the website reads `https://<ref>.supabase.co/rest/v1/<table>` with the anon key and the header `Accept-Profile: api`. Row-level security with a SELECT-only policy plus SELECT-only grants mean the anon key can read and nothing else; OpenTofu (`supabase_settings`) exposes the schema.
 
 ```bash
 make mode-full     # or mode-ingest: the job itself needs only Airflow
-make publish       # same code as the DAG; prints source vs Supabase vs R2 counts
+make publish       # same code as the DAG; on the laptop a dry run (rows and targets per table)
 make api-check     # anon SELECT works; INSERT, UPDATE, DELETE are rejected
 ```
 
 Credentials (`CLOUD_S3_*`, `SUPABASE_DB_*`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`) come from `.env`; the [cloud runbook](docs/runbooks/cloud-setup.md) covers creating and rotating them. A published gold column is part of the API: change it with a new Supabase migration in the same change (a test compares the migrations with the dbt contracts).
 
-### Production ingestion (GitHub Actions)
+### Production pipeline (GitHub Actions)
 
-Dev is the laptop (Airflow and Cosmos on SeaweedFS). Prod is the workflow [`prod-pipeline.yml`](.github/workflows/prod-pipeline.yml), which runs the **same code** nightly, configured only by environment variables (`WANDERLAKE_ENV=prod`). The architecture decision (ADR-0012) and a runbook follow with the transform and publish step.
+Dev is the laptop (Airflow and Cosmos on SeaweedFS). Prod is the workflow [`prod-pipeline.yml`](.github/workflows/prod-pipeline.yml), which runs the **same code** nightly, configured only by environment variables (`WANDERLAKE_ENV=prod`): ingestion, `dbt build` on a throwaway Trino, then publish to Supabase `api` and R2 `gold/`. It is the only writer to the live site's data. Decision: [ADR-0012](docs/adr/0012-dev-on-laptop-prod-on-github-actions-single-writer.md); operations: [runbook](docs/runbooks/prod-pipeline.md).
 
 | | Dev (laptop) | Prod (GitHub Actions) |
 |---|---|---|
@@ -347,13 +349,13 @@ Dev is the laptop (Airflow and Cosmos on SeaweedFS). Prod is the workflow [`prod
 | Iceberg data | `s3://lakehouse/warehouse/` | `s3://wanderlake-lake/warehouse/` (R2) |
 | Iceberg catalog | Postgres database `iceberg_catalog` | Supabase Postgres, schema `iceberg_catalog` (role `wanderlake_catalog`; not exposed through the REST API), same catalog name `wanderlake` |
 | Trino | Compose service, 768 MB heap | throwaway container in the job: 10 GB limit, 8 GB heap, 4 GB per query ([config](infra/prod/trino/etc/config.properties)) |
+| dbt | Cosmos, `make dbt-build` (target `local`) | `dbt build` with `DBT_TARGET=prod` (4 threads) |
+| Publish | dry run | Supabase `api` and R2 `gold/`, verified row counts, then `api.last_updated` |
 
 - **Runner** ([`ingestion/src/ingestion/pipeline.py`](ingestion/src/ingestion/pipeline.py)): config, GeoNames (monthly), REST Countries (weekly), FCDO, Wikimedia (weekly), Frankfurter, CBAR, Open-Meteo forecast and recent history, calling the same `ingest_*`/`load_*` functions as the DAGs. Weekly and monthly sources run only when their latest bronze snapshot is older than their period, so reruns are safe. A failing source is retried twice (60 s apart) and does not stop the others; a source that asks to come back later (Wikidata `maxlag`) is reported as deferred and stays due.
-- **Workflow:** environment `production` (secrets), never two runs at once (concurrency group, no cancelling), actions pinned to commits, read-only token. It starts Trino with the prod catalog, creates the schemas if needed, runs the runner, and writes a job summary: rows loaded per source and row counts of every bronze table.
+- **Workflow:** environment `production` (secrets), never two runs at once (concurrency group, no cancelling), actions pinned to commits, read-only token. It records the run in `ops.pipeline_runs` (a private schema; applies Supabase migrations), starts Trino with the prod catalog, creates the schemas if needed, runs the runner, runs `dbt build` (also when a source failed: the site gets what loaded, and the job still fails), publishes only when dbt passed, and always records the result. The job summary shows rows loaded per source, bronze row counts, the dbt result with failing nodes, published counts per table and the first failed step; GitHub emails a failed run.
 - **Manual runs:** *Actions → Prod pipeline → Run workflow*, mode `daily` (optional date) or `backfill` (Frankfurter and CBAR day by day for 400 days, Open-Meteo history month by month from 2023-01-01, then current snapshots of every source). Same with the CLI: `gh workflow run prod-pipeline.yml -f mode=backfill`. To refill a gap in one source, pick it in `only` with `start`/`end` (for example `-f mode=backfill -f only=cbar_rates -f start=2026-07-07 -f end=2026-09-12`); only that part runs. Failures that look temporary (network errors, HTTP 429/5xx, an HTML error page instead of data) are retried twice, 60 s apart; data errors fail at once.
 - **One-time setup** (done; idempotent): `make prod-catalog-init` (catalog role, schema and tables in Supabase) and `make prod-github-env` (environment `production`, its allowed branches and secrets from `.env`; values are never printed).
-
-In this phase prod only ingests: nothing is written to the Supabase `api` schema, which the laptop still publishes.
 
 ### `frankfurter_rates`
 
@@ -470,7 +472,7 @@ The website (https://wanderlake.vercel.app) is a Next.js app (App Router, TypeSc
 | `/` | Short intro and "Good to visit this month": cities ranked by their share of pleasant days in the current month |
 | `/explore` | A card per city (country and flag, today's weather, best months, currency) with filters for region, travel month and currency; filters live in the URL query (`/explore?region=Asia&month=5`), so links can be shared, and the form works without JavaScript |
 | `/cities/<id>` | Facts (country, region, population, time zone, languages, currency, elevation and its source), today's weather, the 7-day forecast, the best months, a climate chart, a currency converter, and UK travel advice (alert badge, summary, last update, link to GOV.UK) |
-| `/about` | How the pipeline works, data sources and licences, and when the data was last updated |
+| `/about` | How the pipeline works, data sources and licences, and when the data was last updated (`api.last_updated`, also in the footer) |
 
 Plus `sitemap.xml`, `robots.txt` and per-page titles and descriptions.
 
@@ -478,7 +480,7 @@ Plus `sitemap.xml`, `robots.txt` and per-page titles and descriptions.
 - **City photos:** city cards (home, explore) and the city page header show the city's photo from `api.city_images`. `next/image` reserves the space and picks the right size, but the browser loads Wikimedia's own thumbnails (330, 500, 960 or 1280 px wide) directly through a custom loader that accepts only `upload.wikimedia.org/wikipedia/commons/` URLs: the server-side optimiser fetched as `node` and Wikimedia answered with 429 ([ADR-0011](docs/adr/0011-city-images-from-wikimedia-commons-via-wikidata.md)). Copies in our own storage with full optimisation are planned for phase 2, when galleries arrive. Credits are always shown: author, licence (linked) and "via Wikimedia Commons" (linked to the file page). Without a photo, the neutral placeholder is shown.
 - **Climate chart:** a hand-built SVG rendered on the server (no chart library, no JavaScript): average high and low temperature per month as lines and rainy days as bars, with the best months highlighted. A compact layout replaces the wide one on small screens, and the same numbers are available as a table ("Show the data as a table"). Colours meet 3:1 contrast in the light and dark themes.
 
-**Data flow:** gold tables (lakehouse) -> `publish_cloud` -> Supabase schema `api` (read-only REST API, [ADR-0010](docs/adr/0010-serve-site-from-supabase-rest-with-read-only-rls.md)) -> Next.js on Vercel. The data layer in [`web/lib/data/`](web/lib/data/) reads Supabase **on the server only** (`server-only`; `SUPABASE_URL` and `SUPABASE_ANON_KEY`, not `NEXT_PUBLIC_*`), so the key never reaches browsers.
+**Data flow:** gold tables (prod lakehouse) -> nightly [prod pipeline](#production-pipeline-github-actions) publish -> Supabase schema `api` (read-only REST API, [ADR-0010](docs/adr/0010-serve-site-from-supabase-rest-with-read-only-rls.md)) -> Next.js on Vercel. The data layer in [`web/lib/data/`](web/lib/data/) reads Supabase **on the server only** (`server-only`; `SUPABASE_URL` and `SUPABASE_ANON_KEY`, not `NEXT_PUBLIC_*`), so the key never reaches browsers.
 
 - **Rendering:** every page is prerendered at build time, including the 10 city pages, and the data behind them is refreshed in the background at most once an hour (incremental static regeneration through `"use cache"` and the `cacheLife` profile `data` in `next.config.ts`). A visit never waits for Supabase; a page is at most about an hour behind a publish.
 - **When Supabase is down:** cached pages keep serving their last good version (up to 7 days); a page with nothing cached shows "Data temporarily unavailable" instead of failing; a build without data fails on purpose, so Vercel keeps the previous deployment.

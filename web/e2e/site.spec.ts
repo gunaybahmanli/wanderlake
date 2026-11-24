@@ -96,6 +96,14 @@ test("city photos show their credit; cities without one show the placeholder", a
   await expect(page.locator(".city-card .photo-credit")).toHaveCount(1); // only Tokyo has a photo
 });
 
+test("the last publish time shows in the footer and on the About page", async ({ page }) => {
+  // Fixture publishedAt (api.last_updated in production): 2026-11-22T17:48:00Z.
+  await page.goto("/");
+  await expect(page.locator(".site-footer")).toContainText("Data updated: 22 November 2026 at 17:48 UTC");
+  await page.goto("/about");
+  await expect(page.getByText("Data last updated:")).toContainText("22 November 2026 at 17:48 UTC");
+});
+
 test("an unknown city returns 404", async ({ page }) => {
   const response = await page.goto("/cities/atlantis");
   expect(response?.status()).toBe(404);

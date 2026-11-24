@@ -1,7 +1,10 @@
-# Connection settings come from environment variables only (no secrets: local Trino has no auth).
+# Connection settings come from environment variables only (no secrets: Trino has no auth in
+# either environment; it is only reachable inside the compose network or the CI runner).
 # The defaults let `dbt parse` run without a database (CI).
+# Target: DBT_TARGET, default "local" (laptop). The prod pipeline (ADR-0012) sets DBT_TARGET=prod:
+# the same project against the job's throwaway Trino, with more threads (about 16 GB runner).
 wanderlake:
-  target: local
+  target: "{{ env_var('DBT_TARGET', 'local') }}"
   outputs:
     local:
       type: trino
@@ -12,4 +15,14 @@ wanderlake:
       catalog: iceberg
       schema: silver
       threads: 2
+      http_scheme: http
+    prod:
+      type: trino
+      method: none
+      host: "{{ env_var('DBT_TRINO_HOST', 'localhost') }}"
+      port: "{{ env_var('DBT_TRINO_PORT', '8080') | int }}"
+      user: "{{ env_var('DBT_TRINO_USER', 'dbt') }}"
+      catalog: iceberg
+      schema: silver
+      threads: 4
       http_scheme: http

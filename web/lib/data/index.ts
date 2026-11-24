@@ -73,7 +73,8 @@ export async function getExploreData() {
 }
 
 export async function getLastUpdated(): Promise<string | null> {
-  return lastUpdated((await getSiteData()).cities);
+  const { cities, publishedAt } = await getSiteData();
+  return lastUpdated(cities, publishedAt);
 }
 
 /**

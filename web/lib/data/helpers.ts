@@ -291,8 +291,10 @@ export function cityPageData(data: SiteData, cityId: string): CityPageData | nul
   };
 }
 
-/** Newest _built_at across the city rows: when the published data was last refreshed. */
-export function lastUpdated(cities: CityOverview[]): string | null {
+/** When the published data was last refreshed: api.last_updated (the prod pipeline's last
+ * verified publish), else the newest _built_at across the city rows. */
+export function lastUpdated(cities: CityOverview[], publishedAt: string | null = null): string | null {
+  if (publishedAt) return publishedAt;
   const times = cities.map((c) => c._built_at).filter((t): t is string => !!t);
   return times.length ? times.reduce((a, b) => (Date.parse(a) >= Date.parse(b) ? a : b)) : null;
 }

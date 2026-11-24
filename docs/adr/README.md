@@ -16,6 +16,7 @@ and the consequences.
 | [0009](0009-orchestrate-dbt-with-cosmos-and-assets.md) | Orchestrate dbt with Cosmos and asset-based scheduling | Accepted | 2026-11-22 |
 | [0010](0010-serve-site-from-supabase-rest-with-read-only-rls.md) | Serve the public site from Supabase's REST API with read-only RLS (no custom backend) | Accepted | 2026-11-22 |
 | [0011](0011-city-images-from-wikimedia-commons-via-wikidata.md) | City images from Wikimedia Commons via Wikidata | Accepted | 2026-11-24 |
+| [0012](0012-dev-on-laptop-prod-on-github-actions-single-writer.md) | Dev on the laptop, prod on GitHub Actions, single writer to production | Proposed | 2026-11-24 |
 
 ## Adding an ADR
 
