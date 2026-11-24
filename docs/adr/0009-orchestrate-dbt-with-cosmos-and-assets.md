@@ -80,5 +80,8 @@ order relative to ingestion:
   most days through assets, and the fallback covers failed ingestion.
 - The `gold` asset is ready for later consumers (website rebuilds, dashboard refreshes) to be
   scheduled on.
+- Update (2026-11-24, ADR-0011): the weekly `bronze.wikimedia_city_images` asset was added to
+  the condition as an OR (`(four daily inputs) | city images`), so new city images trigger a
+  transform and publish on their own without ever blocking the daily run.
 - `make dbt-*` now runs in a separate `dbt` compose service (read-write project mount, dbt
   settings only); the Airflow container has the project read-only.

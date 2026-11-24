@@ -26,6 +26,7 @@ from wanderlake_assets import (
     GOLD,
     OPEN_METEO_FORECAST,
     OPEN_METEO_HISTORY,
+    WIKIMEDIA_CITY_IMAGES,
 )
 
 log = logging.getLogger(__name__)
@@ -71,12 +72,14 @@ what depends on that model, and a retry reruns only that model.
 **Schedule (data-aware, Airflow Assets):** `AssetOrTimeSchedule` = a run when **all four** daily
 inputs have new asset events since the last asset-triggered run
 (`bronze.frankfurter_rates`, `bronze.cbar_rates`, `bronze.open_meteo_forecast`,
-`bronze.open_meteo_history`; each written by its ingestion DAG's load task), **or** at
-**18:00 UTC** every day as a fallback, so the models still refresh when a source fails or has
-nothing new. On a normal day the asset condition completes at about 16:35 UTC (after the 16:30
-rate DAGs) and the 18:00 run is skipped by the gate. Weekly, monthly and FCDO sources
-(`rest_countries`, `geonames_cities`, `fcdo_advice`, `config_cities`) also publish assets but are
-not in the condition: they never block the daily run, which reads their latest state.
+`bronze.open_meteo_history`; each written by its ingestion DAG's load task), **or** when the
+weekly `bronze.wikimedia_city_images` is updated (on its own, so new city images reach the
+website the same day), **or** at **18:00 UTC** every day as a fallback, so the models still
+refresh when a source fails or has nothing new. On a normal day the asset condition completes
+at about 16:35 UTC (after the 16:30 rate DAGs) and the 18:00 run is skipped by the gate.
+Weekly, monthly and FCDO sources (`rest_countries`, `geonames_cities`, `fcdo_advice`,
+`config_cities`) also publish assets but are not in the condition: they never block the daily
+run, which reads their latest state. The city images trigger a run but never block one (OR).
 
 **Runs on:** Airflow and Trino together (`make mode-full`); dbt runs in its own virtualenv
 (`/opt/dbt-venv`, ADR-0007) as a subprocess, one task at a time (`PARALLELISM=1`).
@@ -131,7 +134,11 @@ def log_freshness_warnings(context: dict) -> None:
     dag_id="wanderlake_transform",
     schedule=AssetOrTimeSchedule(
         timetable=CronTriggerTimetable("0 18 * * *", timezone="UTC"),
-        assets=(FRANKFURTER_RATES & CBAR_RATES & OPEN_METEO_FORECAST & OPEN_METEO_HISTORY),
+        # All four daily inputs, or the weekly city images on their own.
+        assets=(
+            (FRANKFURTER_RATES & CBAR_RATES & OPEN_METEO_FORECAST & OPEN_METEO_HISTORY)
+            | WIKIMEDIA_CITY_IMAGES
+        ),
     ),
     start_date=datetime(2026, 11, 1),
     catchup=False,

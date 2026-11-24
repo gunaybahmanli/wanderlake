@@ -61,7 +61,7 @@ async function latestRates(): Promise<SiteData["rates"]> {
 }
 
 export async function loadFromSupabase(): Promise<SiteData> {
-  const [cities, details, climate, forecasts, advice, rates] = await Promise.all([
+  const [cities, details, climate, forecasts, advice, rates, images] = await Promise.all([
     select<SiteData["cities"][number]>("city_overview", "*"),
     select<SiteData["details"][number]>(
       "dim_city",
@@ -80,9 +80,13 @@ export async function loadFromSupabase(): Promise<SiteData> {
       "country_code,slug,title,has_alert,alert_statuses,public_updated_at,change_description,summary_text,safety_text,entry_requirements_text,health_text",
     ),
     latestRates(),
+    select<SiteData["images"][number]>(
+      "city_images",
+      "city_id,file_name,file_page_url,thumb_url,thumb_width,thumb_height,artist,license_short_name,license_family,license_url",
+    ),
   ]);
   if (cities.length === 0) {
     throw new DataUnavailableError("Supabase api.city_overview returned no rows.");
   }
-  return { cities, details, climate, forecasts, advice, rates };
+  return { cities, details, climate, forecasts, advice, rates, images };
 }

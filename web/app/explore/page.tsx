@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 async function Results({ searchParams }: Pick<PageProps<"/explore">, "searchParams">) {
   const result = await loadOrUnavailable(getExploreData);
   if (!result.ok) return <DataUnavailable />;
-  const { cities, climate, options } = result.data;
+  const { cities, climate, options, images } = result.data;
   const filters = parseExploreFilters(await searchParams, options);
   const cards = filterCities(cities, climate, filters);
   const active = Object.keys(filters).length > 0;
@@ -47,7 +47,11 @@ async function Results({ searchParams }: Pick<PageProps<"/explore">, "searchPara
         <ul className="card-grid">
           {cards.map((card) => (
             <li key={card.city.city_id}>
-              <CityCard city={card.city} pleasantShare={card.pleasantShare} />
+              <CityCard
+                city={card.city}
+                image={images[card.city.city_id] ?? null}
+                pleasantShare={card.pleasantShare}
+              />
             </li>
           ))}
         </ul>

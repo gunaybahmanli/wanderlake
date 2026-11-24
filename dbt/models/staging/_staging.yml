@@ -87,3 +87,10 @@ models:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns: [snapshot_date, country_code]
+
+  - name: stg_wikimedia_city_images
+    description: Wikimedia city images, every weekly snapshot; one row per (snapshot_date, city_id). A view.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [snapshot_date, city_id]

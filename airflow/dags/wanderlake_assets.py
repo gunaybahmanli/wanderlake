@@ -27,9 +27,13 @@ FCDO_ADVICE = iceberg_asset("bronze", "fcdo_advice")
 REST_COUNTRIES = iceberg_asset("bronze", "rest_countries")
 GEONAMES_CITIES = iceberg_asset("bronze", "geonames_cities")
 CONFIG_CITIES = iceberg_asset("bronze", "config_cities")
+WIKIMEDIA_CITY_IMAGES = iceberg_asset("bronze", "wikimedia_city_images")
 
 # The daily inputs that trigger wanderlake_transform (all four must have new events).
 DAILY_TRANSFORM_INPUTS = (FRANKFURTER_RATES, CBAR_RATES, OPEN_METEO_FORECAST, OPEN_METEO_HISTORY)
+# Inputs that trigger wanderlake_transform on their own (OR), so new data reaches the website
+# without waiting for the next daily run: the weekly city images.
+STANDALONE_TRANSFORM_INPUTS = (WIKIMEDIA_CITY_IMAGES,)
 
 # Gold: one asset for the whole layer, updated when a wanderlake_transform run completes.
 GOLD = Asset(name="gold", uri=f"iceberg://{CATALOG}/gold")

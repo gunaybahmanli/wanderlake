@@ -74,6 +74,28 @@ test("climate chart renders with its data table", async ({ page }) => {
   await expect(table.locator("tbody tr")).toHaveCount(12);
 });
 
+test("city photos show their credit; cities without one show the placeholder", async ({ page }) => {
+  await page.goto("/cities/tokyo");
+  const credit = page.locator(".city-cover-hero .photo-credit");
+  await expect(credit).toContainText("Photo: Morio");
+  await expect(credit.getByRole("link", { name: "CC BY-SA 3.0" })).toHaveAttribute(
+    "href",
+    "https://creativecommons.org/licenses/by-sa/3.0",
+  );
+  await expect(credit.getByRole("link", { name: "Wikimedia Commons" })).toHaveAttribute(
+    "href",
+    /commons\.wikimedia\.org\/wiki\/File:/,
+  );
+  await expect(page.getByRole("img", { name: "Photo of Tokyo" })).toBeAttached();
+
+  await page.goto("/cities/baku");
+  await expect(page.locator(".city-image-hero")).toBeVisible();
+  await expect(page.locator(".photo-credit")).toHaveCount(0);
+
+  await page.goto("/explore");
+  await expect(page.locator(".city-card .photo-credit")).toHaveCount(1); // only Tokyo has a photo
+});
+
 test("an unknown city returns 404", async ({ page }) => {
   const response = await page.goto("/cities/atlantis");
   expect(response?.status()).toBe(404);

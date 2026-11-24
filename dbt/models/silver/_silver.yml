@@ -268,3 +268,41 @@ models:
       - {name: is_current, data_type: boolean, description: True for the latest version of each country., data_tests: [not_null]}
       - {name: last_seen_snapshot_date, data_type: date, description: Latest daily snapshot that contained this version.}
       - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built by dbt.}
+
+  - name: silver_city_images
+    description: >
+      Table silver.city_images (alias; the model name differs from gold.city_images because dbt
+      model names must be unique). Cover image per configured city from Wikimedia Commons (via Wikidata), latest snapshot per
+      city, with artist and credit as plain text (macros/html_to_text.sql). Each image keeps its
+      own licence; license_family is cc0, public-domain, cc-by, cc-by-sa or other.
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: city_id
+        data_type: varchar
+        description: City slug.
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments: {to: ref('cities'), field: city_id}
+      - {name: wikidata_id, data_type: varchar, description: Wikidata item of the city (config/cities.yaml)., data_tests: [not_null]}
+      - {name: file_name, data_type: varchar, description: 'Commons file name, without "File:".'}
+      - {name: selection, data_type: varchar, description: "How the file was chosen: preferred, normal (P18 rank), override (cover_image_file) or none."}
+      - {name: file_page_url, data_type: varchar, description: The file's page on Wikimedia Commons.}
+      - {name: original_url, data_type: varchar, description: URL of the original file.}
+      - {name: original_width, data_type: integer, description: Width of the original in pixels.}
+      - {name: original_height, data_type: integer, description: Height of the original in pixels.}
+      - {name: thumb_url, data_type: varchar, description: URL of a resized copy about 1280 px wide (Commons thumbnail).}
+      - {name: thumb_width, data_type: integer, description: Width of the thumbnail in pixels.}
+      - {name: thumb_height, data_type: integer, description: Height of the thumbnail in pixels.}
+      - {name: mime, data_type: varchar, description: Media type of the original.}
+      - {name: license_short_name, data_type: varchar, description: 'Licence as Commons names it, e.g. "CC BY-SA 4.0".'}
+      - {name: license_code, data_type: varchar, description: 'Machine-readable licence, e.g. cc-by-sa-4.0.'}
+      - {name: license_url, data_type: varchar, description: Link to the licence text (none for public domain).}
+      - {name: license_family, data_type: varchar, description: 'cc0, public-domain, cc-by, cc-by-sa, or other.', data_tests: [not_null]}
+      - {name: artist, data_type: varchar, description: Author as plain text.}
+      - {name: credit, data_type: varchar, description: Credit line as plain text (e.g. Own work).}
+      - {name: attribution_required, data_type: boolean, description: Whether the licence requires attribution (Commons metadata).}
+      - {name: snapshot_date, data_type: date, description: Weekly snapshot the row comes from.}
+      - {name: _built_at, data_type: timestamp(6) with time zone, description: When this table was built.}

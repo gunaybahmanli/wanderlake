@@ -3,7 +3,13 @@ import "server-only";
 import { cacheLife } from "next/cache";
 
 import { fixtureData } from "./fixtures";
-import { cityPageData, exploreOptions, lastUpdated, rankCitiesByMonth } from "./helpers";
+import {
+  cityPageData,
+  exploreOptions,
+  imagesByCity,
+  lastUpdated,
+  rankCitiesByMonth,
+} from "./helpers";
 import { DataUnavailableError, loadFromSupabase } from "./supabase";
 import type { SiteData } from "./types";
 
@@ -49,12 +55,21 @@ export async function getGoodThisMonth() {
   cacheLife("data");
   const data = await getSiteData();
   const month = new Date().getUTCMonth() + 1;
-  return { month, ranked: rankCitiesByMonth(data.cities, data.climate, month) };
+  return {
+    month,
+    ranked: rankCitiesByMonth(data.cities, data.climate, month),
+    images: imagesByCity(data.images),
+  };
 }
 
 export async function getExploreData() {
   const data = await getSiteData();
-  return { cities: data.cities, climate: data.climate, options: exploreOptions(data.cities) };
+  return {
+    cities: data.cities,
+    climate: data.climate,
+    options: exploreOptions(data.cities),
+    images: imagesByCity(data.images),
+  };
 }
 
 export async function getLastUpdated(): Promise<string | null> {
