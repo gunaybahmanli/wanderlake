@@ -30,6 +30,8 @@ dev = [
     # Test doubles (no internet or real S3 needed)
     "requests-mock",
     "moto[s3]",
+    "ruamel-yaml>=0.19.1",
+    "trino==0.340.0",
 ]
 
 [tool.uv]

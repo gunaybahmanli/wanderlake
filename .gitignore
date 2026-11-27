@@ -20,6 +20,7 @@ htmlcov/
 .venv/
 venv/
 .venv-airflow/
+.venv-dbt/
 .airflow-ci/
 env/
 .python-version.local

@@ -529,6 +529,32 @@ Run `make` on its own to list all targets. The hooks also run automatically on e
 
 CI (GitHub Actions) runs the same checks on every pull request and push to `main`: lint, unit tests, and DAG integrity against Airflow 3.4.0. Dependabot opens weekly grouped updates for GitHub Actions and Python dependencies.
 
+## Developer tools
+
+AI helpers for working on the dbt project, both local and both kept away from production
+([ADR-0013](docs/adr/0013-ai-assisted-development-dbt-mcp-and-reviewed-ai-docs.md)).
+
+**dbt MCP server (read-only).** Claude Code can inspect the dbt project through the official
+open-source [dbt MCP server](https://github.com/dbt-labs/dbt-mcp) (dbt Labs), configured at
+project scope in [`.mcp.json`](.mcp.json) and started by
+[`scripts/dbt-mcp.sh`](scripts/dbt-mcp.sh) (`dbt-mcp` 2.10.3, pinned).
+
+- **Tools:** only `list`, `parse`, `compile`, `show`, `get_lineage_dev` and `get_node_details_dev`: project discovery, lineage, model and column details, compiled SQL and small previews (`show` returns 5 rows by default). `build`, `run`, `test`, `seed`, `clone`, `docs` and every dbt platform toolset are off.
+- **Database:** the laptop's dev Trino only (target `local`), as the Trino user `wanderlake_mcp`, which Trino's access control limits to reads ([`rules.json`](infra/compose/trino/etc/rules.json)). This second layer matters because `show` runs the SQL it is given: SQL with its own `LIMIT` is not wrapped.
+- **Start:** `make mode-query` (Trino), `make dbt-venv` once (local dbt in `.venv-dbt`, same pins as CI and prod), then open Claude Code in the repository and approve the project server `dbt` when asked.
+- **Check:** `/mcp` in Claude Code (or `claude mcp list`) shows `dbt` as connected. `make mcp-check` starts the server on its own, lists its tools and fails if any tool that writes is exposed; `make mcp-check ARGS="--lineage model.wanderlake.fct_exchange_rate --node city_overview"` also calls two tools.
+
+**AI-drafted dbt docs (human-reviewed).** `make docs-draft` (needs `make mode-query` and
+`make dbt-venv`) finds models, seeds, source tables and columns without a description, including
+columns that exist in Trino but are missing from the YAML, and asks a local
+[Ollama](https://ollama.com) model (`llama3.2:3b` by default, `OLLAMA_MODEL` to change) for a
+one-sentence draft from the name, the model SQL, the column type and up to 3 sample values (read
+as `wanderlake_mcp`, `LIMIT 5`). Nothing leaves the machine.
+
+- Drafts are written into the YAML with the prefix `(draft) `. Review each one, fix it, and remove the marker. Existing descriptions are never changed; very short ones are only listed. Options: `ARGS="--select <name> --dry-run"`.
+- `make docs-check`, and the CI job "No unreviewed AI drafts in dbt docs", fail while any `(draft)` marker remains, so unreviewed AI text cannot reach `main` unnoticed.
+- Ollama runs on Windows. WSL (NAT networking) reaches it at the Windows host, which is WSL's default gateway (`ip route`); the script tries `OLLAMA_HOST`, then `localhost`, then the gateway, and stops with instructions if none answers. Ollama must listen on all interfaces (`OLLAMA_HOST=0.0.0.0` in the Windows environment).
+
 ## Repository layout
 
 | Path | Purpose |
@@ -538,6 +564,7 @@ CI (GitHub Actions) runs the same checks on every pull request and push to `main
 | `infra/tofu` | OpenTofu infrastructure as code for cloud resources |
 | `infra/prod` | Production pipeline: prod Trino settings, one-time catalog and GitHub setup |
 | `.github/workflows` | CI and the production pipeline |
+| `scripts` | dbt MCP server wrapper and its check |
 | `ingestion` | Python ingestion package and its tests |
 | `airflow/dags` | Airflow DAGs |
 | `streaming` | Kafka and Debezium configuration and consumers |
@@ -545,7 +572,7 @@ CI (GitHub Actions) runs the same checks on every pull request and push to `main
 | `config` | Shared configuration (`cities.yaml`) |
 | `dbt` | dbt project for silver and gold models (see Transformations) |
 | `legacy` | Simulated legacy/operational source systems |
-| `ai` | RAG pipeline, embeddings and MCP server |
+| `ai` | AI developer tools: `make docs-draft` and `make docs-check` (later: RAG pipeline, embeddings) |
 | `api` | FastAPI backend |
 | `web` | Next.js website |
 | `dashboards` | Evidence.dev and Superset assets |

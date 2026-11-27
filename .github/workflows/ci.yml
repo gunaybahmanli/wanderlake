@@ -61,6 +61,18 @@ jobs:
       - name: Run unit tests
         run: make test
 
+  docs-check:
+    # Fails while any AI-drafted dbt description still carries its "(draft)" marker (ADR-0013):
+    # unreviewed AI text cannot reach main unnoticed. Standard library only, no install needed.
+    name: No unreviewed AI drafts in dbt docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check for (draft) markers
+        run: python3 -m ai.check_draft_docs
+
   dag-integrity:
     name: DAG integrity (Airflow 3.4.0)
     runs-on: ubuntu-latest
