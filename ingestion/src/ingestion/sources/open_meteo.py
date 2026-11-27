@@ -45,7 +45,7 @@ from pyiceberg.types import (
 )
 
 from ingestion.common.geo import haversine_km
-from ingestion.common.http import build_session
+from ingestion.common.http import SourceUnavailableError, build_session
 from ingestion.common.iceberg import ensure_table, replace_range, replace_rows
 from ingestion.common.logging import get_logger, log_event
 from ingestion.common.s3 import put_json, s3_client
@@ -137,6 +137,13 @@ class OpenMeteoError(RuntimeError):
     """Raised when a response is unusable or does not match the configured cities."""
 
 
+class OpenMeteoUnavailableError(OpenMeteoError, SourceUnavailableError):
+    """Open-Meteo answered with something that is not JSON (seen on 2026-11-26 from a GitHub
+    runner: HTTP 200 with a non-JSON body). Temporary, so it is retried like the CBAR web page;
+    the body is never stored in raw. Valid JSON that does not match the cities stays a data error.
+    """
+
+
 @dataclass(frozen=True)
 class RawResponse:
     body: bytes  # exactly as received
@@ -198,7 +205,7 @@ def parse_locations(
     try:
         payload = json.loads(body)
     except ValueError as exc:
-        raise OpenMeteoError("response is not valid JSON") from exc
+        raise OpenMeteoUnavailableError("response is not valid JSON") from exc
     if isinstance(payload, dict) and payload.get("error"):
         raise OpenMeteoError(f"Open-Meteo error: {payload.get('reason')}")
     locations = [payload] if isinstance(payload, dict) else payload
