@@ -23,6 +23,7 @@ from ingestion.sources.open_meteo import (
     HISTORY_SPEC,
     HISTORY_TABLE,
     OpenMeteoError,
+    OpenMeteoUnavailableError,
     forecast_to_arrow,
     history_to_arrow,
     history_window,
@@ -92,6 +93,25 @@ def test_history_parses_several_cities() -> None:
         date(2026, 11, 10),
     }
     assert "uv_index_max" not in batch.column_names  # forecast-only variable
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"<!DOCTYPE html><html><head><title>502 Bad Gateway</title></head></html>",
+        b"",
+        b'[{"latitude": 40.4, "daily": {"time": [',  # cut off mid-response
+    ],
+)
+def test_a_response_that_is_not_json_is_temporary(body: bytes) -> None:
+    from ingestion.pipeline import is_transient
+
+    with pytest.raises(OpenMeteoUnavailableError, match="response is not valid JSON") as caught:
+        parse_locations(body, load_cities())
+    assert is_transient(caught.value)  # retried by the runner (2026-11-26 failed without retries)
+    with pytest.raises(OpenMeteoError) as data_error:  # valid JSON, wrong content: not retried
+        parse_locations(FORECAST, load_cities()[:4])
+    assert not is_transient(data_error.value)
 
 
 def test_missing_city_is_detected() -> None:

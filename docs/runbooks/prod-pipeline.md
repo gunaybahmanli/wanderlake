@@ -7,7 +7,16 @@ site's data ([ADR-0012](../adr/0012-dev-on-laptop-prod-on-github-actions-single-
 ## What runs, and when
 
 Every day at **17:15 UTC** (after the ECB and CBAR rates are out), one job on a GitHub-hosted
-runner:
+runner. The schedule is `cron: "15 17 * * *"` in
+[`prod-pipeline.yml`](../../.github/workflows/prod-pipeline.yml) with no `timezone` key, so GitHub
+reads it in UTC (its default; a `timezone` would change that, and none is set anywhere).
+
+GitHub starts scheduled runs when it has capacity, not on the minute: the first nights started
+between 00:59 and 01:25 UTC (25 to 27 November 2026), about 8 hours late. That is a delay,
+not a time zone (a run started at 00:59, before 17:15 Pacific would be). Such a run is dated by
+its UTC start, so after midnight it processes the next date; rates use the latest published day
+(as-of rule), so nothing is missed, and the site updates in the early UTC morning. If no run has
+started by 06:00 UTC, start one by hand (below).
 
 | Step (id) | What it does | If it fails |
 |---|---|---|
@@ -33,7 +42,7 @@ notify for failed workflows"). Push alerts (Telegram) come in phase 5.
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| a source `❌ failed` with `HTTPError 5xx`, timeouts, `got a web page instead of XML` | the source API was down (already retried twice, 60 s apart) | nothing; the next nightly run catches up. Or rerun (below). Rates for a missed day: backfill with `only` |
+| a source `❌ failed` with `HTTPError 5xx`, timeouts, `got a web page instead of XML`, `response is not valid JSON` | the source API was down (already retried twice, 60 s apart) | nothing; the next nightly run catches up. Or rerun (below). Rates for a missed day: backfill with `only` |
 | `⏳ deferred` (Wikimedia) | Wikidata asked bots to wait (`maxlag`) | nothing; the source stays due and runs next time |
 | `trino` failed | image pull or start problem; R2/Supabase settings | read the printed Trino log; check the secrets (below) |
 | `record_start` failed with an authentication error | Supabase password changed, or the project is paused | resume the project in the Supabase dashboard; `make prod-github-env` after changing a password |
