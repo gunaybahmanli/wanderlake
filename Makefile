@@ -4,12 +4,15 @@
 	web-install web-dev web-lint web-build web-test web-env web-e2e \
 	trino lakehouse-init lakehouse-smoke-test build mode-query mode-ingest mode-full weather-backfill \
 	config-load dbt-deps dbt-build dbt-test dbt-source-freshness dbt-docs dbt-manifest \
-	publish api-check prod-catalog-init prod-github-env
+	publish api-check prod-catalog-init prod-github-env \
+	dbt-venv mcp-check docs-draft docs-check
 
 PROFILE ?= core
 SERVICE ?=
 BUCKET ?= raw
 DAG ?=
+ARGS ?=
+DBT_MCP_VERSION := 2.10.3
 START ?=
 END ?=
 REPROCESS ?= none
@@ -180,6 +183,23 @@ dbt-deps: ## dbt: install packages (dbt_utils)
 dbt-manifest: ## dbt: parse the project into dbt/target/manifest.json for Cosmos (rerun after model changes)
 	@$(DBT_RUN) parse
 	@echo "dbt/target/manifest.json updated: wanderlake_transform picks it up on the next DAG parse."
+
+# Developer tools (ADR-0013): local dbt for the dbt MCP server and make docs-draft.
+dbt-venv: ## Dev tools: local dbt in .venv-dbt (same pins as the image, CI and prod)
+	@uv venv --allow-existing -q .venv-dbt --python 3.12
+	@uv pip install -q --python .venv-dbt -r infra/airflow/requirements-dbt.txt
+	@.venv-dbt/bin/dbt --version 2>/dev/null | grep installed
+
+mcp-check: ## Dev tools: start the dbt MCP server, fail if any tool can write (ARGS="--lineage ...")
+	$(REQUIRE_TRINO)
+	@uvx --quiet --from dbt-mcp==$(DBT_MCP_VERSION) python scripts/mcp_check.py $(ARGS) 2>/dev/null
+
+docs-draft: ## Dev tools: draft missing dbt descriptions with local Ollama, marked (draft)
+	$(REQUIRE_TRINO)
+	@if [ -f .env ]; then set -a; . ./.env; set +a; fi; uv run python -m ai.docs_draft $(ARGS)
+
+docs-check: ## Dev tools: fail while any (draft) description is unreviewed (also in CI)
+	@uv run python -m ai.check_draft_docs
 
 dbt-build: ## dbt: build all models and run all tests (needs make mode-query)
 	$(REQUIRE_TRINO)

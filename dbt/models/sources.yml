@@ -33,6 +33,12 @@ sources:
             description: Units of quote_currency per 1 EUR, decimal(18, 8).
           - name: _loaded_at
             description: When the bronze row was written.
+          - name: _ingested_at
+            description: "(draft) Timestamp of when the data was ingested, including time zone."
+          - name: _source_file
+            description: "(draft) Path to the original file where the data was stored."
+          - name: _dag_run_id
+            description: "(draft) Unique identifier for the data ingestion DAG run."
 
       - name: cbar_rates
         description: >
@@ -53,6 +59,12 @@ sources:
             description: AZN for `nominal` units of the currency, decimal(18, 6).
           - name: _loaded_at
             description: When the bronze row was written.
+          - name: _ingested_at
+            description: "(draft) Timestamp of when the data was ingested, including time zone."
+          - name: _source_file
+            description: "(draft) Path to the original file where the data was stored."
+          - name: _dag_run_id
+            description: "(draft) Unique identifier for the data ingestion process."
 
       - name: config_cities
         description: >
@@ -71,6 +83,10 @@ sources:
             description: ISO 4217 code of the city's currency.
           - name: rate_source
             description: ecb or cbar (which central bank publishes the currency).
+          - name: _source_file
+            description: "(draft) Source file hash."
+          - name: _dag_run_id
+            description: "(draft) DAG run ID."
 
       - name: rest_countries
         description: >
@@ -90,6 +106,42 @@ sources:
             description: 'JSON list of language objects ({name, native_name, iso639_*, bcp47}).'
           - name: _loaded_at
             description: When the bronze row was written.
+          - name: cca3
+            description: "(draft) ISO 3166 code for the country."
+          - name: name_common
+            description: "(draft) Common name of the country."
+          - name: name_official
+            description: "(draft) Official name of the country."
+          - name: region
+            description: "(draft) Geographical region of the country."
+          - name: subregion
+            description: "(draft) Subregion of the country."
+          - name: capital
+            description: "(draft) Capital city of the country."
+          - name: capitals_json
+            description: "(draft) JSON array of capital cities."
+          - name: population
+            description: "(draft) Population of the country."
+          - name: area_km2
+            description: "(draft) Area of the country in square kilometers."
+          - name: timezones_json
+            description: "(draft) JSON array of time zones."
+          - name: lat
+            description: "(draft) Latitude of the country."
+          - name: lon
+            description: "(draft) Longitude of the country."
+          - name: flag_png_url
+            description: "(draft) URL of the country's flag image."
+          - name: independent
+            description: "(draft) Whether the country is independent."
+          - name: un_member
+            description: "(draft) Whether the country is not a member of the UN."
+          - name: _ingested_at
+            description: "(draft) Timestamp when the data was ingested."
+          - name: _source_file
+            description: "(draft) Path to the source file."
+          - name: _dag_run_id
+            description: "(draft) ID of the DAG run that generated the data."
 
       - name: geonames_cities
         description: >
@@ -107,6 +159,46 @@ sources:
             description: Digital elevation model value in metres (SRTM3 or GTOPO30); always filled.
           - name: _loaded_at
             description: When the bronze row was written.
+          - name: snapshot_date
+            description: "(draft) Date of the monthly GeoNames cities15000 snapshot."
+          - name: alternatenames
+            description: "(draft) Alternative names for the city."
+          - name: feature_class
+            description: "(draft) Feature class of the city."
+          - name: feature_code
+            description: "(draft) Feature code of the city."
+          - name: country_code
+            description: "(draft) Country code of the city."
+          - name: cc2
+            description: "(draft) Currency code of the city."
+          - name: admin1_code
+            description: "(draft) Administrative region code of the city."
+          - name: admin2_code
+            description: "(draft) Administrative district code of the city."
+          - name: admin3_code
+            description: "(draft) Unique code for the third level of administrative division."
+          - name: admin4_code
+            description: "(draft) Unique code for the fourth level of administrative division."
+          - name: population
+            description: "(draft) Population of the city."
+          - name: timezone
+            description: "(draft) Time zone of the city."
+          - name: modification_date
+            description: "(draft) Date of last modification."
+          - name: _ingested_at
+            description: "(draft) Timestamp when data was ingested."
+          - name: _source_file
+            description: "(draft) Source file path for the data."
+          - name: _dag_run_id
+            description: "(draft) ID of the data ingestion DAG run."
+          - name: name
+            description: "(draft) The name of each city, in the local language."
+          - name: asciiname
+            description: "(draft) The name of each city in the ASCII character set."
+          - name: latitude
+            description: "(draft) The latitude of each city."
+          - name: longitude
+            description: "(draft) The longitude of each city."
 
       - name: open_meteo_history
         description: >
@@ -119,6 +211,30 @@ sources:
             description: Local date in the city's time zone.
           - name: _loaded_at
             description: When the bronze row was written.
+          - name: weather_code
+            description: "(draft) Weather code (integer)."
+          - name: temperature_2m_max
+            description: "(draft) Maximum 2m temperature (double)."
+          - name: temperature_2m_min
+            description: "(draft) Minimum 2m temperature (double)."
+          - name: temperature_2m_mean
+            description: "(draft) Mean 2m temperature (double)."
+          - name: precipitation_sum
+            description: "(draft) Total precipitation (double)."
+          - name: rain_sum
+            description: "(draft) Total rain (double)."
+          - name: snowfall_sum
+            description: "(draft) Total snowfall (double)."
+          - name: precipitation_hours
+            description: "(draft) Total precipitation hours (double)."
+          - name: wind_speed_10m_max
+            description: "(draft) Maximum 10m wind speed (double)."
+          - name: sunshine_duration
+            description: "(draft) Sunshine duration (double)."
+          - name: _ingested_at
+            description: "(draft) Ingestion timestamp (timestamp with time zone)."
+          - name: _source_file
+            description: "(draft) Source file path (varchar)."
 
       - name: open_meteo_forecast
         description: >
@@ -131,6 +247,36 @@ sources:
             description: Local date the forecast is for.
           - name: _loaded_at
             description: When the bronze row was written.
+          - name: weather_code
+            description: "(draft) Weather condition code."
+          - name: temperature_2m_max
+            description: "(draft) Maximum 2m temperature."
+          - name: temperature_2m_min
+            description: "(draft) Minimum 2m temperature."
+          - name: temperature_2m_mean
+            description: "(draft) Mean 2m temperature."
+          - name: precipitation_hours
+            description: "(draft) Total precipitation hours."
+          - name: wind_speed_10m_max
+            description: "(draft) Maximum 10m wind speed."
+          - name: sunshine_duration
+            description: "(draft) Total sunshine duration."
+          - name: uv_index_max
+            description: "(draft) Maximum UV index."
+          - name: precipitation_probability_max
+            description: "(draft) Probability of maximum precipitation in the forecast."
+          - name: _ingested_at
+            description: "(draft) Timestamp of when the data was ingested."
+          - name: _source_file
+            description: "(draft) Path to the source file."
+          - name: _dag_run_id
+            description: "(draft) ID of the DAG run that generated the data."
+          - name: precipitation_sum
+            description: "(draft) Total Precipitation (mm)."
+          - name: rain_sum
+            description: "(draft) Total Rainfall (mm)."
+          - name: snowfall_sum
+            description: "(draft) Total Snowfall (mm)."
 
       - name: fcdo_advice
         description: >
@@ -147,6 +293,20 @@ sources:
             description: 'JSON list of sections {slug, title, body} with the HTML body as received.'
           - name: _loaded_at
             description: When the bronze row was written.
+          - name: country_code
+            description: "(draft) Country code (e.g. AE, AZ, CZ)."
+          - name: slug
+            description: "(draft) Slug for the country (e.g. united-arab-emirates, azerbaijan, czechia)."
+          - name: title
+            description: "(draft) Title of the travel advice (e.g. United Arab Emirates travel advice, Azerbaijan travel advice, Czechia travel advice)."
+          - name: change_description
+            description: "(draft) Description of the changes made to the travel advice."
+          - name: _ingested_at
+            description: "(draft) Timestamp when the data was ingested."
+          - name: _source_file
+            description: "(draft) Path to the source file (e.g. s3://raw/fcdo/advice/snapshot_date=2026-11-21/AE.json)."
+          - name: _dag_run_id
+            description: "(draft) ID of the DAG run that ingested the data."
 
       - name: wikimedia_city_images
         description: >
@@ -167,3 +327,45 @@ sources:
             description: cc0, public-domain, cc-by, cc-by-sa, or other (not allowed).
           - name: _loaded_at
             description: When the bronze row was written.
+          - name: wikidata_id
+            description: "(draft) Wikidata ID of the selected image."
+          - name: selection
+            description: "(draft) Method used to select the image (override, normal, preferred)."
+          - name: candidates_json
+            description: "(draft) JSON array of candidate images with their rank."
+          - name: file_page_url
+            description: "(draft) URL of the image on Wikimedia Commons."
+          - name: original_url
+            description: "(draft) URL of the original image file."
+          - name: original_width
+            description: "(draft) Width of the original image."
+          - name: original_height
+            description: "(draft) Height of the original image."
+          - name: thumb_url
+            description: "(draft) URL of the thumbnail image."
+          - name: thumb_width
+            description: "(draft) Width of the thumbnail image."
+          - name: thumb_height
+            description: "(draft) Height of the thumbnail image."
+          - name: mime
+            description: "(draft) MIME type of the image."
+          - name: license_short_name
+            description: "(draft) Short name of the image license."
+          - name: license_code
+            description: "(draft) The license code of the image, e.g. cc-by-sa-4.0."
+          - name: license_url
+            description: "(draft) The URL of the license, e.g. https://creativecommons.org/licenses/by-sa/4.0."
+          - name: artist_html
+            description: "(draft) The HTML of the artist's information, e.g. <a href=\"//commons.wikimedia.org/w/index.php?title=User:Rufa."
+          - name: credit_html
+            description: "(draft) The HTML of the credit information, e.g. <span class=\"int-own-work\" lang=\"en\">Own work</span>."
+          - name: attribution_required
+            description: "(draft) Whether attribution is required, e.g. True."
+          - name: usage_terms
+            description: "(draft) The usage terms of the image, e.g. Creative Commons Attribution-Share Alike 4.0."
+          - name: _ingested_at
+            description: "(draft) The timestamp when the data was ingested, e.g. 2026-11-24 08:27:16+00:00."
+          - name: _source_file
+            description: "(draft) The source file of the image, e.g. s3://raw/wikimedia/commons/snapshot_date=2026-11-24/baku.jso."
+          - name: _dag_run_id
+            description: "(draft) The ID of the DAG run, e.g. manual__2026-11-24T08:27:13.076058+00:00."

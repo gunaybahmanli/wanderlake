@@ -1,0 +1,6 @@
+{
+  "catalogs": [
+    {"user": "wanderlake_mcp", "catalog": ".*", "allow": "read-only"},
+    {"catalog": ".*", "allow": "all"}
+  ]
+}
